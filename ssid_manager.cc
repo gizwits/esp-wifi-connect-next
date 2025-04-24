@@ -103,6 +103,26 @@ void SsidManager::AddSsid(const std::string& ssid, const std::string& password) 
     SaveToNvs();
 }
 
+void SsidManager::SaveUid(const std::string& uid) {
+    // 如果 uid 有效，保存到 NVS 并设置 need_bootstrap flag
+    if (!uid.empty()) {
+        nvs_handle_t nvs_handle;
+        ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
+        
+        // 保存 uid
+        ESP_ERROR_CHECK(nvs_set_str(nvs_handle, "uid", uid.c_str()));
+        
+        // 设置 need_bootstrap flag
+        uint8_t need_bootstrap = 1;
+        ESP_ERROR_CHECK(nvs_set_u8(nvs_handle, "need_bootstrap", need_bootstrap));
+        
+        ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+        nvs_close(nvs_handle);
+        
+        ESP_LOGI(TAG, "Saved uid: %s and set need_bootstrap flag", uid.c_str());
+    }
+}
+
 void SsidManager::RemoveSsid(int index) {
     if (index < 0 || index >= ssid_list_.size()) {
         ESP_LOGW(TAG, "Invalid index %d", index);

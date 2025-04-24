@@ -357,6 +357,7 @@ void WifiConfigurationAp::StartWebServer()
 
             cJSON *ssid_item = cJSON_GetObjectItemCaseSensitive(json, "ssid");
             cJSON *password_item = cJSON_GetObjectItemCaseSensitive(json, "password");
+            cJSON *uid_item = cJSON_GetObjectItemCaseSensitive(json, "uid");
 
             if (!cJSON_IsString(ssid_item) || (ssid_item->valuestring == NULL)) {
                 cJSON_Delete(json);
@@ -370,6 +371,12 @@ void WifiConfigurationAp::StartWebServer()
                 password_str = password_item->valuestring;
             }
 
+            // 获取 UID（如果存在）
+            std::string uid_str = "";
+            if (cJSON_IsString(uid_item) && (uid_item->valuestring != NULL)) {
+                uid_str = uid_item->valuestring;
+            }
+
             // 获取当前对象
             auto *this_ = static_cast<WifiConfigurationAp *>(req->user_ctx);
             if (!this_->ConnectToWifi(ssid_str, password_str)) {
@@ -377,7 +384,8 @@ void WifiConfigurationAp::StartWebServer()
                 httpd_resp_send(req, "{\"success\":false,\"error\":\"无法连接到 WiFi\"}", HTTPD_RESP_USE_STRLEN);
                 return ESP_OK;
             }
-
+            ESP_LOGI(TAG, "Save uid %s", uid_str.c_str());
+            SsidManager::GetInstance().SaveUid(uid_str);
             this_->Save(ssid_str, password_str);
             cJSON_Delete(json);
             // 设置成功响应
@@ -750,7 +758,7 @@ void WifiConfigurationAp::SmartConfigEventHandler(void *arg, esp_event_base_t ev
             memcpy(password, evt->password, sizeof(evt->password));
             ESP_LOGI(TAG, "SmartConfig SSID: %s, Password: %s", ssid, password);
             // 尝试连接WiFi会失败，故不连接
-            self->Save(ssid, password);
+            self->Save(ssid, password); // airlink 先不管
             xTaskCreate([](void *ctx){
                 ESP_LOGI(TAG, "Restarting in 3 second");
                 vTaskDelay(pdMS_TO_TICKS(3000));

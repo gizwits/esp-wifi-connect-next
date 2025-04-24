@@ -68,7 +68,7 @@ void DnsServer::Run() {
         len += 10;
         memcpy(&buffer[len], &gateway_.addr, 4);  // 192.168.4.1
         len += 4;
-        ESP_LOGI(TAG, "Sending DNS response to %s", inet_ntoa(gateway_.addr));
+        // ESP_LOGI(TAG, "Sending DNS response to %s", inet_ntoa(gateway_.addr));
 
         sendto(fd_, buffer, len, 0, (struct sockaddr *)&client_addr, client_addr_len);
     }
