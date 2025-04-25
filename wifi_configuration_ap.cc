@@ -15,6 +15,7 @@
 #include <cJSON.h>
 #include <esp_smartconfig.h>
 #include "ssid_manager.h"
+#include "wifi_connection_manager.h"
 
 #define TAG "WifiConfigurationAp"
 
@@ -137,10 +138,6 @@ void WifiConfigurationAp::StartAccessPoint()
     // Start the DNS server
     dns_server_.Start(ip_info.gw);
 
-    // Initialize the WiFi stack in Access Point mode
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
     // Get the SSID
     std::string ssid = GetSsid();
 
@@ -151,11 +148,10 @@ void WifiConfigurationAp::StartAccessPoint()
     wifi_config.ap.max_connection = 4;
     wifi_config.ap.authmode = WIFI_AUTH_OPEN;
 
-    // Start the WiFi Access Point
+    // Switch to APSTA mode and configure AP
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
-    ESP_ERROR_CHECK(esp_wifi_start());
 
 #ifdef CONFIG_SOC_WIFI_SUPPORT_5G
     // Temporarily use only 2.4G Wi-Fi.
@@ -324,7 +320,7 @@ void WifiConfigurationAp::StartWebServer()
         .handler = [](httpd_req_t *req) -> esp_err_t {
             char *buf;
             size_t buf_len = req->content_len;
-            if (buf_len > 1024) { // 限制最大请求体大小
+            if (buf_len > 1024) {
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large");
                 return ESP_FAIL;
             }
@@ -377,22 +373,21 @@ void WifiConfigurationAp::StartWebServer()
                 uid_str = uid_item->valuestring;
             }
 
-            // 获取当前对象
-            auto *this_ = static_cast<WifiConfigurationAp *>(req->user_ctx);
-            if (!this_->ConnectToWifi(ssid_str, password_str)) {
+            // 使用 WiFi 连接管理器进行连接
+            auto& wifi_manager = WifiConnectionManager::GetInstance();
+            if (wifi_manager.Connect(ssid_str, password_str)) {
+                wifi_manager.SaveCredentials(ssid_str, password_str);
+                if (!uid_str.empty()) {
+                    wifi_manager.SaveUid(uid_str);
+                }
+                cJSON_Delete(json);
+                httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
+                return ESP_OK;
+            } else {
                 cJSON_Delete(json);
                 httpd_resp_send(req, "{\"success\":false,\"error\":\"无法连接到 WiFi\"}", HTTPD_RESP_USE_STRLEN);
                 return ESP_OK;
             }
-            ESP_LOGI(TAG, "Save uid %s", uid_str.c_str());
-            SsidManager::GetInstance().SaveUid(uid_str);
-            this_->Save(ssid_str, password_str);
-            cJSON_Delete(json);
-            // 设置成功响应
-            httpd_resp_set_type(req, "application/json");
-            httpd_resp_set_hdr(req, "Connection", "close");
-            httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
-            return ESP_OK;
         },
         .user_ctx = this
     };
@@ -634,54 +629,12 @@ void WifiConfigurationAp::StartWebServer()
 
 bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::string &password)
 {
-    if (ssid.empty()) {
-        ESP_LOGE(TAG, "SSID cannot be empty");
-        return false;
-    }
-    
-    if (ssid.length() > 32) {  // WiFi SSID 最大长度
-        ESP_LOGE(TAG, "SSID too long");
-        return false;
-    }
-    
-    is_connecting_ = true;
-    esp_wifi_scan_stop();
-    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-
-    wifi_config_t wifi_config;
-    bzero(&wifi_config, sizeof(wifi_config));
-    strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
-    strcpy((char *)wifi_config.sta.password, password.c_str());
-    wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-    wifi_config.sta.failure_retry_cnt = 1;
-    
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    auto ret = esp_wifi_connect();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi: %d", ret);
-        is_connecting_ = false;
-        return false;
-    }
-    ESP_LOGI(TAG, "Connecting to WiFi %s", ssid.c_str());
-
-    // Wait for the connection to complete for 5 seconds
-    EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
-    is_connecting_ = false;
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
-        esp_wifi_disconnect();
+    auto& wifi_manager = WifiConnectionManager::GetInstance();
+    if (wifi_manager.Connect(ssid, password)) {
+        wifi_manager.SaveCredentials(ssid, password);
         return true;
-    } else {
-        ESP_LOGE(TAG, "Failed to connect to WiFi %s", ssid.c_str());
-        return false;
     }
-}
-
-void WifiConfigurationAp::Save(const std::string &ssid, const std::string &password)
-{
-    ESP_LOGI(TAG, "Save SSID %s %d", ssid.c_str(), ssid.length());
-    SsidManager::GetInstance().AddSsid(ssid, password);
+    return false;
 }
 
 void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -758,7 +711,7 @@ void WifiConfigurationAp::SmartConfigEventHandler(void *arg, esp_event_base_t ev
             memcpy(password, evt->password, sizeof(evt->password));
             ESP_LOGI(TAG, "SmartConfig SSID: %s, Password: %s", ssid, password);
             // 尝试连接WiFi会失败，故不连接
-            self->Save(ssid, password); // airlink 先不管
+            WifiConnectionManager::GetInstance().Connect(ssid, password);
             xTaskCreate([](void *ctx){
                 ESP_LOGI(TAG, "Restarting in 3 second");
                 vTaskDelay(pdMS_TO_TICKS(3000));

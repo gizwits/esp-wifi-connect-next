@@ -20,7 +20,6 @@ public:
     void RemoveSsid(int index);
     void SetDefaultSsid(int index);
     void Clear();
-    void SaveUid(const std::string& uid);
     const std::vector<SsidItem>& GetSsidList() const { return ssid_list_; }
 
 private:

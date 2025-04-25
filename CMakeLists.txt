@@ -3,7 +3,16 @@ idf_component_register(
         "wifi_configuration_ap.cc"
         "wifi_station.cc"
         "ssid_manager.cc"
+        "wifi_configuration_ble.cc"
+        "wifi_manager_c.cc"
+        "wifi_connection_manager.cc"
         "dns_server.cc"
+        "ble/adv.c"
+        "ble/ble.c"
+        "ble/gatt_svr.c"
+        "ble/misc.c"
+        "protocol/parse_protocol.c"
+        "protocol/pack_protocol.c"
     INCLUDE_DIRS
         "include"
     EMBED_TXTFILES
@@ -15,4 +24,5 @@ idf_component_register(
         "esp_wifi"
         "nvs_flash"
         "json"
+        "bt"
 )
