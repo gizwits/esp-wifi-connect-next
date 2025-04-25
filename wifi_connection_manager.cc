@@ -130,7 +130,7 @@ void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_b
 
 
 void WifiConnectionManager::SaveUid(const std::string& uid) {
-    // 如果 uid 有效，保存到 NVS 并设置 need_bootstrap flag
+    // 如果 uid 有效，保存到 NVS 并设置 need_activation flag
     if (!uid.empty()) {
         nvs_handle_t nvs_handle;
         ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
@@ -138,14 +138,14 @@ void WifiConnectionManager::SaveUid(const std::string& uid) {
         // 保存 uid
         ESP_ERROR_CHECK(nvs_set_str(nvs_handle, "uid", uid.c_str()));
         
-        // 设置 need_bootstrap flag
-        int32_t need_bootstrap = 1;
-        ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, "need_bootstrap", need_bootstrap));
+        // 设置 need_activation flag
+        int32_t need_activation = 1;
+        ESP_ERROR_CHECK(nvs_set_i32(nvs_handle, "need_activation", need_activation));
         
         ESP_ERROR_CHECK(nvs_commit(nvs_handle));
         nvs_close(nvs_handle);
         
-        ESP_LOGI(TAG, "Saved uid: %s and set need_bootstrap flag", uid.c_str());
+        ESP_LOGI(TAG, "Saved uid: %s and set need_activation flag", uid.c_str());
     }
 }
 
