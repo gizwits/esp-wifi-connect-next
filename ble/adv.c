@@ -17,8 +17,9 @@ static const char *tag = "nimble_adv";
 struct ble_instance_cb_register ble_instance_cb[BLE_ADV_INSTANCES];
 static uint8_t ext_adv_pattern_1[64] = {0};
 static size_t ext_adv_pattern_1_len = 0;
+static const char *current_device_name = NULL;  // 存储当前设备名称
 static void ble_multi_perform_gatt_proc(ble_addr_t addr);
-static void ble_multi_adv_conf_set_addr(uint16_t instance, struct ble_gap_ext_adv_params *params,
+static void ble_multi_adv_conf_set_addr(uint16_t instance, struct ble_gap_adv_params *params,
                             uint8_t *pattern, int size_pattern, int duration);
 static int ble_adv_set_addr(uint16_t instance);
 static void ble_multi_adv_print_conn_desc(struct ble_gap_conn_desc *desc);
@@ -38,14 +39,6 @@ ble_scannable_legacy_ext_cb(uint16_t instance)
 }
 
 
-void ble_set_network_status(bool configured)
-{
-    if (configured) {
-        ext_adv_pattern_1[VERSION_TYPE_INDEX + 1] |= NETWORK_CONFIG;
-    } else {
-        ext_adv_pattern_1[VERSION_TYPE_INDEX + 1] &= ~NETWORK_CONFIG;
-    }
-}
 esp_err_t ble_gen_adv_data(const char *device_name, uint32_t pk, const uint8_t *mac)
 {
     ESP_LOGI(tag, "Setting BLE advertisement data...");
@@ -61,62 +54,57 @@ esp_err_t ble_gen_adv_data(const char *device_name, uint32_t pk, const uint8_t *
         return ESP_ERR_INVALID_ARG;
     }
 
-    // ESP_LOGI(tag, "Configuring advertisement data with name: %s, PK: 0x%08X, MAC: %02X:%02X:%02X:%02X:%02X:%02X",
-    //          device_name, pk, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    // 保存设备名称
+    current_device_name = device_name;
 
     size_t index = 0;
 
-    // 1. Flags
-    ext_adv_pattern_1[index++] = 0x02;
-    ext_adv_pattern_1[index++] = 0x01;
-    ext_adv_pattern_1[index++] = 0x06;
-    ESP_LOGD(tag, "Added flags data at index 0");
+    // 1. Flags (3 bytes)
+    ext_adv_pattern_1[index++] = 0x02;  // Length
+    ext_adv_pattern_1[index++] = 0x01;  // Type (Flags)
+    ext_adv_pattern_1[index++] = 0x06;  // Data (LE General Discoverable Mode, BR/EDR Not Supported)
 
-    // 3. Service UUID
-    ext_adv_pattern_1[index++] = 0x03;
-    ext_adv_pattern_1[index++] = 0x03;
-    ext_adv_pattern_1[index++] = 0xD0;
-    ext_adv_pattern_1[index++] = 0xAB;
-    ESP_LOGD(tag, "Added second service UUID (0xD0AB) at index 7");
+    // 2. Service UUID (4 bytes)
+    ext_adv_pattern_1[index++] = 0x03;  // Length
+    ext_adv_pattern_1[index++] = 0x03;  // Type (Complete List of 16-bit Service UUIDs)
+    ext_adv_pattern_1[index++] = 0xD0;  // UUID (LSB)
+    ext_adv_pattern_1[index++] = 0xAB;  // UUID (MSB)
 
-    // 4. Device Name
-    ext_adv_pattern_1[index++] = name_len + 1;
+    ext_adv_pattern_1[index++] = 3 + 1;
     ext_adv_pattern_1[index++] = 0x09;
-    memcpy(&ext_adv_pattern_1[index], device_name, name_len);
-    index += name_len;
+    memcpy(&ext_adv_pattern_1[index], "XPG", 3);
+    index += 3;
 
-    // 填充到 31
-    for (int i = index; i < 31; i++) {
-        ext_adv_pattern_1[i] = 0x00;
-    }
-    index = 31;
 
-    // 自定义部分
-    ext_adv_pattern_1[index++] = 0x0F;
-    ext_adv_pattern_1[index++] = 0xFF;
-    ext_adv_pattern_1[index++] = 0x3D;
-    ext_adv_pattern_1[index++] = 0x00;
-    ESP_LOGD(tag, "Added manufacturer specific data header at index %d", index - 4);
+    // 3. Manufacturer Specific Data (16 bytes)
+    ext_adv_pattern_1[index++] = 0x0F;  // Length (15 bytes of data)
+    ext_adv_pattern_1[index++] = 0xFF;  // Type (Manufacturer Specific Data)
+    ext_adv_pattern_1[index++] = 0x3D;  // Company ID (LSB)
+    ext_adv_pattern_1[index++] = 0x00;  // Company ID (MSB)
     
+    // Version and Function Mask
     ext_adv_pattern_1[index++] = VERSION_TYPE;
-    uint8_t function_mask = BLE_VERSION_5_0 | SUPPORT_OTA | NO_SECURITY_AUTH | ONE_DEVICE_SECRET;
+    uint8_t function_mask = BLE_VERSION_4_2 | SUPPORT_OTA | NO_SECURITY_AUTH | ONE_DEVICE_SECRET;
     ext_adv_pattern_1[index++] = function_mask;
-    ESP_LOGD(tag, "Version: 0x%02X, Function Mask: 0x%02X", VERSION_TYPE, function_mask);
 
-    // PK
+    // PK (4 bytes)
     ext_adv_pattern_1[index++] = (pk >> 24) & 0xFF;
     ext_adv_pattern_1[index++] = (pk >> 16) & 0xFF;
     ext_adv_pattern_1[index++] = (pk >> 8) & 0xFF;
     ext_adv_pattern_1[index++] = pk & 0xFF;
-    ESP_LOGD(tag, "Added PK at index %d", index - 4);
 
-    // MAC
+    // MAC (6 bytes)
     memcpy(&ext_adv_pattern_1[index], mac, 6);
     index += 6;
-    ESP_LOGD(tag, "Added MAC address at index %d", index - 6);
     
-    ESP_LOGD(tag, "Added device name at index 11, length: %d", name_len);
     ext_adv_pattern_1_len = index;
+
+    // 打印广播数据用于调试
+    ESP_LOGI(tag, "Advertisement data length: %d", ext_adv_pattern_1_len);
+    ESP_LOGI(tag, "Advertisement data:");
+    for (int i = 0; i < ext_adv_pattern_1_len; i++) {
+        ESP_LOGI(tag, "0x%02X ", ext_adv_pattern_1[i]);
+    }
 
     return ESP_OK;
 }
@@ -166,8 +154,7 @@ ble_multi_adv_gap_event(struct ble_gap_event *event, void *arg)
         ble_multi_adv_print_conn_desc(&event->disconnect.conn);
         MODLOG_DFLT(INFO, "\n");
         ble_set_conn_handle(BLE_HS_CONN_HANDLE_NONE);
-        ble_multi_advertise(ble_instance_cb[event->adv_complete.instance].addr);
-
+        ble_multi_advertise(event->disconnect.conn.our_id_addr);
         return 0;
 
     case BLE_GAP_EVENT_CONN_UPDATE:
@@ -244,7 +231,6 @@ ble_multi_adv_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         ESP_LOGI(tag, "PASSKEY_ACTION_EVENT started");
         struct ble_sm_io pkey = {0};
-        int key = 0;
 
         if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
             pkey.action = event->passkey.params.action;
@@ -300,25 +286,34 @@ void
 start_connectable_ext(void)
 {
     uint8_t instance = 0;
-    struct ble_gap_ext_adv_params params;
-    int size_pattern = ext_adv_pattern_1_len / sizeof(ext_adv_pattern_1[0]);
+    struct ble_gap_adv_params params;
+    int size_pattern = ext_adv_pattern_1_len;
 
-    memset (&params, 0, sizeof(params));
-
-    params.connectable = 1;
-    params.scannable = 1;
-    params.legacy_pdu = 1;
-    params.own_addr_type = BLE_OWN_ADDR_PUBLIC;
-    params.primary_phy = BLE_HCI_LE_PHY_1M;
-    params.secondary_phy = BLE_HCI_LE_PHY_2M;
-    params.sid = 0;
+    // 使用标准蓝牙4.2广播参数
+    memset(&params, 0, sizeof(params));
+    params.conn_mode = BLE_GAP_CONN_MODE_UND;
+    params.disc_mode = BLE_GAP_DISC_MODE_GEN;
     params.itvl_min = BLE_GAP_ADV_FAST_INTERVAL1_MIN;
-    params.itvl_max = BLE_GAP_ADV_FAST_INTERVAL1_MIN;
+    params.itvl_max = BLE_GAP_ADV_FAST_INTERVAL1_MAX;
+    params.channel_map = 0;
+    params.filter_policy = BLE_HCI_ADV_FILT_DEF;
+    params.high_duty_cycle = 0;
 
-    ble_multi_adv_conf_set_addr(instance, &params, ext_adv_pattern_1,
-                                size_pattern, 0);
-    ble_instance_cb[instance].cb = &ble_connectable_ext_cb;
+    // 直接设置广播数据
+    int rc = ble_gap_adv_set_data(ext_adv_pattern_1, size_pattern);
+    if (rc != 0) {
+        ESP_LOGE(tag, "Failed to set advertisement data: %d", rc);
+        return;
+    }
 
+    // 开始广播
+    rc = ble_gap_adv_start(instance, NULL, BLE_HS_FOREVER, &params, ble_multi_adv_gap_event, NULL);
+    if (rc != 0) {
+        ESP_LOGE(tag, "Failed to start advertising: %d", rc);
+        return;
+    }
+
+    ESP_LOGI(tag, "Advertising started successfully");
 }
 
 
@@ -337,82 +332,6 @@ ble_multi_advertise(ble_addr_t addr)
         }
     }
 }
-static void
-ble_multi_adv_conf_set_addr(uint16_t instance, struct ble_gap_ext_adv_params *params,
-                            uint8_t *pattern, int size_pattern, int duration)
-{
-    int rc;
-    struct os_mbuf *data;
-
-    if (ble_gap_ext_adv_active(instance)) {
-        ESP_LOGI(tag, "Instance already advertising");
-        return;
-    }
-
-    rc = ble_gap_ext_adv_configure(instance, params, NULL,
-                                   ble_multi_adv_gap_event, NULL);
-
-    if (rc != 0) {
-        ESP_LOGE(tag, "ble_gap_ext_adv_configure failed: %d", rc);
-        return;
-    }
-
-    rc = ble_adv_set_addr(instance);
-    if (rc != 0) {
-        ESP_LOGE(tag, "ble_adv_set_addr failed: %d", rc);
-        return;
-    }
-
-    /* get mbuf for adv data */
-    data = os_msys_get_pkthdr(size_pattern, 0);
-    if (data == NULL) {
-        ESP_LOGE(tag, "os_msys_get_pkthdr failed");
-        return;
-    }
-
-    /* fill mbuf with adv data */
-    rc = os_mbuf_append(data, pattern, 31);
-    if (rc != 0) {
-        ESP_LOGE(tag, "os_mbuf_append failed: %d", rc);
-        return;
-    }
-
-    rc = ble_gap_ext_adv_set_data(instance, data);
-    if (rc != 0) {
-        ESP_LOGE(tag, "ble_gap_ext_adv_set_data failed: %d", rc);
-        return;
-    }
-
-    /* get mbuf for scan rsp data */
-    data = os_msys_get_pkthdr(31, 0);
-    if (data == NULL) {
-        ESP_LOGE(tag, "os_msys_get_pkthdr failed");
-        return;
-    }
-
-    /* fill mbuf with scan rsp data */
-    rc = os_mbuf_append(data, pattern + 31, 31);
-    if (rc != 0) {
-        ESP_LOGE(tag, "os_mbuf_append failed: %d", rc);
-        return;
-    }
-
-    rc = ble_gap_ext_adv_rsp_set_data(instance, data);
-    if (rc != 0) {
-        ESP_LOGE(tag, "ble_gap_ext_adv_rsp_set_data failed: %d", rc);
-        return;
-    }
-
-    /* start advertising */
-    rc = ble_gap_ext_adv_start(instance, duration, 0);
-    if (rc != 0) {
-        ESP_LOGE(tag, "ble_gap_ext_adv_start failed: %d", rc);
-        return;
-    }
-
-    ESP_LOGI(tag, "Instance %d started", instance);
-}
-
 
 
 static int ble_adv_set_addr(uint16_t instance)
@@ -427,7 +346,7 @@ static int ble_adv_set_addr(uint16_t instance)
     }
 
     /* Set generated address */
-    rc = ble_gap_ext_adv_set_addr(instance, &addr);
+    rc = ble_gap_adv_set_data(&addr, sizeof(addr));  // 使用正确的函数
     if (rc != 0) {
         return rc;
     }
