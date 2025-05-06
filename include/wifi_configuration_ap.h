@@ -25,15 +25,15 @@ struct WifiConfigData {
 class WifiConfigurationAp {
 public:
     static WifiConfigurationAp& GetInstance();
-    void SetSsidPrefix(const std::string &&ssid_prefix);
-    void SetLanguage(const std::string &&language);
+    void SetSsidPrefix(const std::string &ssid_prefix);
+    void SetLanguage(const std::string &language);
     void Start();
     void Stop();
     void StartSmartConfig();
 
     std::string GetSsid();
     std::string GetWebServerUrl();
-
+    void StartWebServer();
     // Delete copy constructor and assignment operator
     WifiConfigurationAp(const WifiConfigurationAp&) = delete;
     WifiConfigurationAp& operator=(const WifiConfigurationAp&) = delete;
@@ -70,7 +70,6 @@ private:
     bool remember_bssid_;
 
     void StartAccessPoint();
-    void StartWebServer();
     bool ConnectToWifi(const std::string &ssid, const std::string &password);
     void Save(const std::string &ssid, const std::string &password);
 

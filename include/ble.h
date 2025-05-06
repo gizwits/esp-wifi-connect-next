@@ -11,6 +11,8 @@ extern "C" {
 
 // 声明外部变量
 extern bool is_init;
+extern uint16_t notify_handle;
+extern uint16_t conn_handle;
 
 // BLE 初始化
 void ble_init(const char *product_key);

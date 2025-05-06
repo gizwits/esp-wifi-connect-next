@@ -60,12 +60,12 @@ WifiConfigurationAp::~WifiConfigurationAp()
     }
 }
 
-void WifiConfigurationAp::SetLanguage(const std::string &&language)
+void WifiConfigurationAp::SetLanguage(const std::string &language)
 {
     language_ = language;
 }
 
-void WifiConfigurationAp::SetSsidPrefix(const std::string &&ssid_prefix)
+void WifiConfigurationAp::SetSsidPrefix(const std::string &ssid_prefix)
 {
     ssid_prefix_ = ssid_prefix;
 }
@@ -85,7 +85,8 @@ void WifiConfigurationAp::Start()
                                                         &instance_got_ip_));
 
     StartAccessPoint();
-    StartWebServer();
+    // 默认不启动web server
+    // StartWebServer();
     StartUdpServer();
     
     // Start scan immediately

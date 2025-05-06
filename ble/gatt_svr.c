@@ -59,9 +59,6 @@ typedef void (*ble_data_callback_t)(const uint8_t *data, size_t length);
 // 在文件开头添加函数声明
 static void print_received_data(const uint8_t *data, size_t len, bool is_no_response);
 
-// 在特征值定义时保存句柄
-static uint16_t notify_handle;
-
 // 在文件开头添加外部声明
 extern void process_wifi_config(const char* ssid, const char* password, const char* uid);
 

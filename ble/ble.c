@@ -34,6 +34,10 @@
 #include "adv.h"
 #include "esp_mac.h"
 
+// 定义全局变量
+uint16_t notify_handle = BLE_HS_CONN_HANDLE_NONE;
+uint16_t conn_handle = BLE_HS_CONN_HANDLE_NONE;
+
 static uint8_t addr_val[6] = {0};
 static const char *tag = "NimBLE_BLE_PRPH";
 static uint8_t own_addr_type;
@@ -240,9 +244,6 @@ ble_stop(void)
     ESP_LOGI(tag, "BLE stopped successfully");
 }
 
-// 保存通知特征值的句柄
-static uint16_t notify_handle = BLE_HS_CONN_HANDLE_NONE;
-static uint16_t conn_handle = BLE_HS_CONN_HANDLE_NONE;
 
 // 设置通知句柄的函数
 void ble_set_notify_handle(uint16_t handle) {

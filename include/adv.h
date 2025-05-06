@@ -23,6 +23,7 @@ extern "C" {
 
 // 功能掩码定义
 #define BLE_VERSION_5_0    0x02    // BLE 5.0
+#define BLE_VERSION_4_2    0x01    // BLE 5.1
 #define SUPPORT_OTA        0x08    // 支持 OTA
 #define SECURITY_AUTH      0x10    // 进行安全认证
 #define NO_SECURITY_AUTH      0x00    // 不进行安全认证
