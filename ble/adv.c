@@ -21,7 +21,6 @@ static const char *current_device_name = NULL;  // 存储当前设备名称
 static void ble_multi_perform_gatt_proc(ble_addr_t addr);
 static void ble_multi_adv_conf_set_addr(uint16_t instance, struct ble_gap_adv_params *params,
                             uint8_t *pattern, int size_pattern, int duration);
-static int ble_adv_set_addr(uint16_t instance);
 static void ble_multi_adv_print_conn_desc(struct ble_gap_conn_desc *desc);
 
 static int
@@ -331,27 +330,6 @@ ble_multi_advertise(ble_addr_t addr)
             }
         }
     }
-}
-
-
-static int ble_adv_set_addr(uint16_t instance)
-{
-    ble_addr_t addr;
-    int rc;
-
-    /* generate new non-resolvable private address */
-    rc = ble_hs_id_gen_rnd(1, &addr);
-    if (rc != 0) {
-        return rc;
-    }
-
-    /* Set generated address */
-    rc = ble_gap_adv_set_data(&addr, sizeof(addr));  // 使用正确的函数
-    if (rc != 0) {
-        return rc;
-    }
-    memcpy(&ble_instance_cb[instance].addr, &addr, sizeof(addr));
-    return 0;
 }
 
 
