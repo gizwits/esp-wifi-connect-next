@@ -4,7 +4,7 @@ This component helps with Wi-Fi connection for the device.
 
 It first tries to connect to a Wi-Fi network using the credentials stored in the flash. If this fails, it starts an access point and a web server to allow the user to connect to a Wi-Fi network.
 
-The URL to access the web server is `http://192.168.4.1`.
+The URL to access the web server is `http://10.10.100.254`.
 
 ### Screenshot: Wi-Fi Configuration
 

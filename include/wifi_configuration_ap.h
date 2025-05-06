@@ -13,6 +13,15 @@
 
 #include "dns_server.h"
 
+
+struct WifiConfigData {
+    std::string ssid;
+    std::string password;
+    std::string uid;
+    uint8_t flag;
+    uint16_t cmd;
+};
+
 class WifiConfigurationAp {
 public:
     static WifiConfigurationAp& GetInstance();
@@ -28,12 +37,20 @@ public:
     // Delete copy constructor and assignment operator
     WifiConfigurationAp(const WifiConfigurationAp&) = delete;
     WifiConfigurationAp& operator=(const WifiConfigurationAp&) = delete;
+    void SetShouldRedirect(bool should_redirect) { should_redirect_ = should_redirect; }
+    bool GetShouldRedirect() const { return should_redirect_; } 
 
 private:
+    void StartUdpServer();
+    void UdpServerTask(void* arg);
+    static void UdpServerTaskWrapper(void* arg);
+    int tcp_server_socket_ = -1;
+    TaskHandle_t tcp_server_task_ = nullptr; 
     // Private constructor
     WifiConfigurationAp();
+    bool ParseWifiConfig(const uint8_t* data, size_t len, WifiConfigData& config);
     ~WifiConfigurationAp();
-
+    bool should_redirect_ = false;  // Default to true for backward compatibility
     std::mutex mutex_;
     DnsServer dns_server_;
     httpd_handle_t server_ = NULL;

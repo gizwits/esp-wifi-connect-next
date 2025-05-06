@@ -16,6 +16,11 @@
 #include <esp_smartconfig.h>
 #include "ssid_manager.h"
 #include "wifi_connection_manager.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define TAG "WifiConfigurationAp"
 
@@ -24,6 +29,7 @@
 
 extern const char index_html_start[] asm("_binary_wifi_configuration_html_start");
 extern const char done_html_start[] asm("_binary_wifi_configuration_done_html_start");
+
 
 WifiConfigurationAp& WifiConfigurationAp::GetInstance() {
     static WifiConfigurationAp instance;
@@ -80,6 +86,7 @@ void WifiConfigurationAp::Start()
 
     StartAccessPoint();
     StartWebServer();
+    StartUdpServer();
     
     // Start scan immediately
     esp_wifi_scan_start(nullptr, false);
@@ -99,6 +106,247 @@ void WifiConfigurationAp::Start()
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &scan_timer_));
 }
 
+void WifiConfigurationAp::StartUdpServer()
+{
+    ESP_LOGI(TAG, "Starting UDP server...");
+    
+    // Create UDP socket
+    tcp_server_socket_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (tcp_server_socket_ < 0) {
+        ESP_LOGE(TAG, "Failed to create socket, error: %d", errno);
+        return;
+    }
+    ESP_LOGI(TAG, "UDP socket created successfully, fd: %d", tcp_server_socket_);
+
+    // Set socket options
+    int opt = 1;
+    if (setsockopt(tcp_server_socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        ESP_LOGE(TAG, "Failed to set socket options, error: %d", errno);
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
+        return;
+    }
+    ESP_LOGI(TAG, "Socket options set successfully");
+
+    // Set non-blocking mode
+    int flags = fcntl(tcp_server_socket_, F_GETFL, 0);
+    if (flags < 0) {
+        ESP_LOGE(TAG, "Failed to get socket flags, error: %d", errno);
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
+        return;
+    }
+    if (fcntl(tcp_server_socket_, F_SETFL, flags | O_NONBLOCK) < 0) {
+        ESP_LOGE(TAG, "Failed to set non-blocking mode, error: %d", errno);
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
+        return;
+    }
+    ESP_LOGI(TAG, "Socket set to non-blocking mode");
+
+    // Bind socket to specific IP and port
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr("10.10.100.254");
+    server_addr.sin_port = htons(12414);
+
+    if (bind(tcp_server_socket_, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        ESP_LOGE(TAG, "Failed to bind socket to 10.10.100.254:12414, error: %d", errno);
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
+        return;
+    }
+    ESP_LOGI(TAG, "Socket bound successfully to 10.10.100.254:12414");
+
+    // Create task to handle UDP messages
+    BaseType_t task_created = xTaskCreate(&WifiConfigurationAp::UdpServerTaskWrapper, 
+                                        "udp_server", 
+                                        4096, 
+                                        this, 
+                                        5, 
+                                        &tcp_server_task_);
+    
+    if (task_created != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create UDP server task");
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
+        return;
+    }
+    ESP_LOGI(TAG, "UDP server task created successfully");
+}
+
+void WifiConfigurationAp::UdpServerTaskWrapper(void* arg)
+{
+    static_cast<WifiConfigurationAp*>(arg)->UdpServerTask(arg);
+}
+
+bool WifiConfigurationAp::ParseWifiConfig(const uint8_t* data, size_t len, WifiConfigData& config) {
+    if (len < 4) {
+        ESP_LOGE(TAG, "Data too short");
+        return false;
+    }
+
+    // Check header [0, 0, 0, 3]
+    if (data[0] != 0 || data[1] != 0 || data[2] != 0 || data[3] != 3) {
+        ESP_LOGE(TAG, "Invalid protocol header");
+        return false;
+    }
+
+    // Find content start position
+    int content_start = 4;  // Skip header
+    
+    // Skip length bytes (they end with a value <= 255)
+    while (content_start < len && data[content_start] > 255) {
+        content_start++;
+    }
+    content_start++;  // Skip the last length byte
+    
+    if (content_start >= len) {
+        ESP_LOGE(TAG, "Invalid content length");
+        return false;
+    }
+
+    // Parse content
+    int pos = content_start;
+    
+    // Parse flag (1 byte)
+    config.flag = data[pos++];
+    
+    // Parse command (2 bytes)
+    if (pos + 1 >= len) {
+        ESP_LOGE(TAG, "Data too short for command");
+        return false;
+    }
+    config.cmd = (data[pos] << 8) | data[pos + 1];
+    pos += 2;
+    
+    // Parse SSID
+    if (pos >= len) {
+        ESP_LOGE(TAG, "Data too short for SSID length");
+        return false;
+    }
+    uint8_t ssid_len = data[pos++];
+    if (pos + ssid_len > len) {
+        ESP_LOGE(TAG, "Data too short for SSID");
+        return false;
+    }
+    config.ssid = std::string((char*)&data[pos], ssid_len);
+    pos += ssid_len;
+    
+    // Parse Password
+    if (pos >= len) {
+        ESP_LOGE(TAG, "Data too short for password length");
+        return false;
+    }
+    uint8_t pwd_len = data[pos++];
+    if (pos + pwd_len > len) {
+        ESP_LOGE(TAG, "Data too short for password");
+        return false;
+    }
+    config.password = std::string((char*)&data[pos], pwd_len);
+    pos += pwd_len;
+    
+    // Parse UID
+    if (pos >= len) {
+        ESP_LOGE(TAG, "Data too short for UID length");
+        return false;
+    }
+    uint8_t uid_len = data[pos++];
+    if (pos + uid_len > len) {
+        ESP_LOGE(TAG, "Data too short for UID");
+        return false;
+    }
+    config.uid = std::string((char*)&data[pos], uid_len);
+    
+    return true;
+}
+
+void WifiConfigurationAp::UdpServerTask(void* arg)
+{
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char buffer[1024];
+
+    ESP_LOGI(TAG, "UDP server task started, waiting for messages...");
+
+    while (1) {
+        // 如果正在连接中，跳过接收消息
+        if (is_connecting_) {
+            vTaskDelay(pdMS_TO_TICKS(100));  // 等待100ms再检查
+            continue;
+        }
+
+        // Receive UDP message
+        int len = recvfrom(tcp_server_socket_, buffer, sizeof(buffer) - 1, 0,
+                          (struct sockaddr *)&client_addr, &client_len);
+        
+        if (len < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // No data available, wait a bit
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            ESP_LOGE(TAG, "Error occurred during receiving: %d (errno: %d)", len, errno);
+            continue;
+        }
+
+        buffer[len] = '\0';
+        ESP_LOGI(TAG, "Received UDP message from %s:%d, length: %d", 
+                inet_ntoa(client_addr.sin_addr), 
+                ntohs(client_addr.sin_port),
+                len);
+
+        // Parse the protocol
+        WifiConfigData config;
+        if (ParseWifiConfig((uint8_t*)buffer, len, config)) {
+            ESP_LOGI(TAG, "Parsed WiFi config:");
+            ESP_LOGI(TAG, "  Flag: %d", config.flag);
+            ESP_LOGI(TAG, "  Command: 0x%04X", config.cmd);
+            ESP_LOGI(TAG, "  SSID: %s", config.ssid.c_str());
+            ESP_LOGI(TAG, "  Password: %s", config.password.c_str());
+            ESP_LOGI(TAG, "  UID: %s", config.uid.c_str());
+
+            // 设置连接标志
+            is_connecting_ = true;
+
+            // 使用WiFi连接管理器进行连接
+            auto& wifi_manager = WifiConnectionManager::GetInstance();
+            if (wifi_manager.Connect(config.ssid, config.password)) {
+                wifi_manager.SaveCredentials(config.ssid, config.password);
+                if (!config.uid.empty()) {
+                    wifi_manager.SaveUid(config.uid);
+                }
+                ESP_LOGI(TAG, "WiFi configuration applied successfully");
+
+                // 发送固定格式的响应
+                uint8_t response[] = {
+                    0x00, 0x00, 0x00, 0x03,  // 固定包头
+                    0x03,                    // 可变长度
+                    0x00,                    // Flag
+                    0x00, 0x02              // 命令字
+                };
+                
+                int sent = sendto(tcp_server_socket_, response, sizeof(response), 0,
+                                (struct sockaddr *)&client_addr, client_len);
+                if (sent < 0) {
+                    ESP_LOGE(TAG, "Failed to send response, error: %d", errno);
+                } else {
+                    ESP_LOGI(TAG, "Response sent successfully");
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(500));
+                esp_restart();
+            } else {
+                ESP_LOGE(TAG, "Failed to connect to WiFi");
+            }
+
+            // 重置连接标志
+            is_connecting_ = false;
+        }
+    }
+}
+
 std::string WifiConfigurationAp::GetSsid()
 {
     // Get MAC and use it to generate a unique SSID
@@ -116,7 +364,7 @@ std::string WifiConfigurationAp::GetSsid()
 std::string WifiConfigurationAp::GetWebServerUrl()
 {
     // http://192.168.4.1
-    return "http://192.168.4.1";
+    return "http://10.10.100.254";
 }
 
 void WifiConfigurationAp::StartAccessPoint()
@@ -127,10 +375,10 @@ void WifiConfigurationAp::StartAccessPoint()
     // Create the default event loop
     ap_netif_ = esp_netif_create_default_wifi_ap();
 
-    // Set the router IP address to 192.168.4.1
+    // Set the router IP address to 10.10.100.254
     esp_netif_ip_info_t ip_info;
-    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.ip, 10, 10, 100, 254);
+    IP4_ADDR(&ip_info.gw, 10, 10, 100, 254);
     IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
     esp_netif_dhcps_stop(ap_netif_);
     esp_netif_set_ip_info(ap_netif_, &ip_info);
@@ -444,6 +692,14 @@ void WifiConfigurationAp::StartWebServer()
 
     auto captive_portal_handler = [](httpd_req_t *req) -> esp_err_t {
         auto *this_ = static_cast<WifiConfigurationAp *>(req->user_ctx);
+        
+        // Check if redirection is enabled
+        if (!this_->should_redirect_) {
+            // If redirection is disabled, return 404
+            httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Not Found");
+            return ESP_OK;
+        }
+
         std::string url = this_->GetWebServerUrl() + "/?lang=" + this_->language_;
         // Set content type to prevent browser warnings
         httpd_resp_set_type(req, "text/html");
@@ -770,6 +1026,16 @@ void WifiConfigurationAp::Stop() {
     if (ap_netif_) {
         esp_netif_destroy(ap_netif_);
         ap_netif_ = nullptr;
+    }
+
+    // Stop TCP server
+    if (tcp_server_task_) {
+        vTaskDelete(tcp_server_task_);
+        tcp_server_task_ = nullptr;
+    }
+    if (tcp_server_socket_ >= 0) {
+        close(tcp_server_socket_);
+        tcp_server_socket_ = -1;
     }
 
     ESP_LOGI(TAG, "Wifi configuration AP stopped");

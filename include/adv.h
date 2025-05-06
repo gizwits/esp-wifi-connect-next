@@ -23,7 +23,6 @@ extern "C" {
 
 // 功能掩码定义
 #define BLE_VERSION_5_0    0x02    // BLE 5.0
-#define BLE_VERSION_4_2    0x01    // BLE 4.2
 #define SUPPORT_OTA        0x08    // 支持 OTA
 #define SECURITY_AUTH      0x10    // 进行安全认证
 #define NO_SECURITY_AUTH      0x00    // 不进行安全认证
@@ -51,6 +50,7 @@ struct ble_instance_cb_register {
     ble_addr_t addr;
     ble_instance_cb_fn *cb;
 };
+void ble_set_network_status(bool configured);
 esp_err_t ble_gen_adv_data(const char *device_name, uint32_t pk, const uint8_t *mac);
 void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg);
 int gatt_svr_init(void);

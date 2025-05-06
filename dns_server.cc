@@ -56,7 +56,7 @@ void DnsServer::Run() {
             continue;
         }
 
-        // Simple DNS response: point all queries to 192.168.4.1
+        // Simple DNS response: point all queries to 10.10.100.254
         buffer[2] |= 0x80;  // Set response flag
         buffer[3] |= 0x80;  // Set Recursion Available
         buffer[7] = 1;      // Set answer count to 1
@@ -66,7 +66,7 @@ void DnsServer::Run() {
         len += 2;
         memcpy(&buffer[len], "\x00\x01\x00\x01\x00\x00\x00\x1c\x00\x04", 10);  // Type, class, TTL, data length
         len += 10;
-        memcpy(&buffer[len], &gateway_.addr, 4);  // 192.168.4.1
+        memcpy(&buffer[len], &gateway_.addr, 4);  // 10.10.100.254
         len += 4;
         // ESP_LOGI(TAG, "Sending DNS response to %s", inet_ntoa(gateway_.addr));
 
