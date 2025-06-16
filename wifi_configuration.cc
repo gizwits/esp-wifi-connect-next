@@ -6,6 +6,7 @@ WifiConfiguration& WifiConfiguration::GetInstance() {
 }
 
 void WifiConfiguration::Initialize(const std::string& product_key, const std::string& ssid_prefix) {
+
     // Initialize WiFi connection manager
     WifiConnectionManager::GetInstance().InitializeWiFi();
 
@@ -19,9 +20,24 @@ void WifiConfiguration::Initialize(const std::string& product_key, const std::st
     auto& ble_config = WifiConfigurationBle::getInstance();
     ble_config.init(product_key);
 #endif
+
 }
 
 void WifiConfiguration::SetLanguage(const std::string &language) {
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetLanguage(language);
+}
+
+void WifiConfiguration::RegisterCallback(WifiConfigCallback callback) {
+    if (callback) {
+        callbacks_.push_back(callback);
+    }
+}
+
+void WifiConfiguration::NotifyEvent(WifiConfigEvent event, const std::string& message) {
+    for (const auto& callback : callbacks_) {
+        if (callback) {
+            callback(event, message);
+        }
+    }
 }

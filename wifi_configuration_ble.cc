@@ -1,4 +1,5 @@
 #include "wifi_configuration_ble.h"
+#include "wifi_configuration.h"
 #include "ble.h"
 #include "gatt_svr.h"
 #include "esp_log.h"
@@ -28,6 +29,7 @@ bool WifiConfigurationBle::init(const std::string& product_key) {
         ESP_LOGE(TAG, "BLE initialization failed");
         return false;
     }
+    
     
     isInitialized_ = true;
     ESP_LOGI(TAG, "BLE initialized successfully");

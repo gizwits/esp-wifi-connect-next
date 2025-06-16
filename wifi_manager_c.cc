@@ -1,11 +1,16 @@
 #include "wifi_manager_c.h"
 #include "wifi_connection_manager.h"
 #include "ssid_manager.h"
+#include "wifi_configuration.h"
 #include <string>
 
 extern "C" {
 
 bool WifiConnectionManager_Connect(const char* ssid, const char* password) {
+    // Notify that WiFi connection is being attempted
+    WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
+        "Attempting to connect to WiFi: " + std::string(ssid));
+    
     return WifiConnectionManager::GetInstance().Connect(
         std::string(ssid), 
         std::string(password)

@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "wifi_configuration.h"
 
 #define TAG "WifiConfigurationAp"
 
@@ -259,6 +260,10 @@ bool WifiConfigurationAp::ParseWifiConfig(const uint8_t* data, size_t len, WifiC
         return false;
     }
     config.uid = std::string((char*)&data[pos], uid_len);
+    
+    // Notify that config packet was received
+    WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
+        "Received WiFi config: SSID=" + config.ssid);
     
     return true;
 }

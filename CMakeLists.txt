@@ -20,6 +20,7 @@ set(REQUIRES
     "esp_wifi"
     "nvs_flash"
     "json"
+    "bt"
 )
 
 if(CONFIG_BT_NIMBLE_ENABLED)
