@@ -10,10 +10,12 @@ void WifiConfiguration::Initialize(const std::string& product_key, const std::st
     // Initialize WiFi connection manager
     WifiConnectionManager::GetInstance().InitializeWiFi();
 
+#if defined(CONFIG_ESP_WIFI_SOFTAP_SUPPORT)
     // Initialize AP configuration
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetSsidPrefix(ssid_prefix);
     wifi_ap.Start();
+#endif
 
 #if defined(CONFIG_BT_NIMBLE_ENABLED)
     // Initialize BLE configuration only if NimBLE is enabled
