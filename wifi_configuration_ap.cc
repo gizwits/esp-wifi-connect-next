@@ -73,6 +73,7 @@ void WifiConfigurationAp::SetSsidPrefix(const std::string &ssid_prefix)
 
 void WifiConfigurationAp::Start()
 {
+#if defined(CONFIG_ESP_WIFI_SOFTAP_SUPPORT)
     // Register event handlers
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
@@ -106,6 +107,7 @@ void WifiConfigurationAp::Start()
         .skip_unhandled_events = true
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &scan_timer_));
+#endif
 }
 
 void WifiConfigurationAp::StartUdpServer()

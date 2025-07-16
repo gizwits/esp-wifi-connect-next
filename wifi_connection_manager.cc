@@ -82,28 +82,36 @@ bool WifiConnectionManager::Connect(const std::string& ssid, const std::string& 
     wifi_config.sta.failure_retry_cnt = 1;
     
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    auto ret = esp_wifi_connect();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi: %d", ret);
-        is_connecting_ = false;
-        return false;
-    }
-    ESP_LOGI(TAG, "Connecting to WiFi %s", ssid.c_str());
+    
+    int retry_count = 0;
+    const int max_retries = 5;
+    bool connected = false;
+    while (retry_count < max_retries && !connected) {
+        esp_err_t ret = esp_wifi_connect();
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "esp_wifi_connect() failed: %d", ret);
+            retry_count++;
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+        ESP_LOGI(TAG, "Connecting to WiFi %s (try %d/%d)", ssid.c_str(), retry_count + 1, max_retries);
 
-    // Wait for the connection to complete for 10 seconds
-    EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+        // 等待连接结果
+        EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+        if (bits & WIFI_CONNECTED_BIT) {
+            ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
+            connected = true;
+            break;
+        } else if (bits & WIFI_FAIL_BIT) {
+            ESP_LOGE(TAG, "Failed to connect to WiFi %s (try %d/%d)", ssid.c_str(), retry_count + 1, max_retries);
+        } else {
+            ESP_LOGE(TAG, "Connection timeout for WiFi %s (try %d/%d)", ssid.c_str(), retry_count + 1, max_retries);
+        }
+        retry_count++;
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
     is_connecting_ = false;
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
-        return true;
-    } else if (bits & WIFI_FAIL_BIT) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi %s", ssid.c_str());
-        return false;
-    } else {
-        ESP_LOGE(TAG, "Connection timeout for WiFi %s", ssid.c_str());
-        return false;
-    }
+    return connected;
 }
 
 void WifiConnectionManager::Disconnect() {
