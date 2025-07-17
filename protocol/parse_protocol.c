@@ -163,6 +163,9 @@ protocol_data_t protocol_parse_data(const uint8_t *data, size_t len) {
 
     // 根据CMD选择不同的解析方法
     switch (header.cmd) {
+        case CMD_GET_WIFI_LIST:
+            result.success = true;
+            break;
         case CMD_WIFI_CONFIG:
             result.success = parse_wifi_config(data, len, &result.data.wifi_config);
             break;

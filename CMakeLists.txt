@@ -6,6 +6,7 @@ set(SOURCES
     "wifi_connection_manager.cc"
     "dns_server.cc"
     "wifi_configuration.cc"
+    "ssid_manager_c.cc"
     "protocol/parse_protocol.c"
     "protocol/pack_protocol.c"
 )

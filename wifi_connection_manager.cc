@@ -2,8 +2,9 @@
 #include "ssid_manager.h"
 #include <string.h>
 #include <nvs_flash.h>
+#include <algorithm> // Added for std::sort
 #define NVS_NAMESPACE "wifi"
-#define MAX_WIFI_SSID_COUNT 10
+#define MAX_WIFI_SCAN_SSID_COUNT 30
 
 const char* WifiConnectionManager::TAG = "WifiConnectionManager";
 
@@ -29,7 +30,8 @@ esp_err_t WifiConnectionManager::InitializeWiFi() {
 
 WifiConnectionManager::WifiConnectionManager() 
     : event_group_(xEventGroupCreate())
-    , is_connecting_(false) {
+    , is_connecting_(false)
+    , scan_timer_(nullptr) {
     
     // Register event handlers
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
@@ -42,9 +44,11 @@ WifiConnectionManager::WifiConnectionManager()
                                                       &WifiConnectionManager::IpEventHandler,
                                                       this,
                                                       &instance_got_ip_));
+    StartScanTimer();
 }
 
 WifiConnectionManager::~WifiConnectionManager() {
+    StopScanTimer();
     if (event_group_) {
         vEventGroupDelete(event_group_);
     }
@@ -57,6 +61,36 @@ WifiConnectionManager::~WifiConnectionManager() {
     // Stop and deinit WiFi
     esp_wifi_stop();
     esp_wifi_deinit();
+}
+
+void WifiConnectionManager::StartScanTimer() {
+    if (scan_timer_) return;
+    esp_timer_create_args_t timer_args = {
+        .callback = &WifiConnectionManager::ScanTimerCallback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "wifi_scan_timer",
+        .skip_unhandled_events = true
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &scan_timer_));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(scan_timer_, 5 * 1000000)); // 5秒周期
+
+    esp_wifi_scan_start(nullptr, false);
+}
+
+void WifiConnectionManager::StopScanTimer() {
+    if (scan_timer_) {
+        esp_timer_stop(scan_timer_);
+        esp_timer_delete(scan_timer_);
+        scan_timer_ = nullptr;
+    }
+}
+
+void WifiConnectionManager::ScanTimerCallback(void* arg) {
+    auto* self = static_cast<WifiConnectionManager*>(arg);
+    if (!self->is_connecting_) {
+        esp_wifi_scan_start(nullptr, false);
+    }
 }
 
 bool WifiConnectionManager::Connect(const std::string& ssid, const std::string& password) {
@@ -133,6 +167,27 @@ void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_b
         xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupSetBits(self->event_group_, WIFI_FAIL_BIT);
+    } else if (event_id == WIFI_EVENT_SCAN_DONE) {
+        // 新增：保存扫描到的所有 SSID，按 rssi 降序排序
+        uint16_t ap_num = 0;
+        std::vector<std::string> scan_ssid_list;
+        if (esp_wifi_scan_get_ap_num(&ap_num) == ESP_OK && ap_num > 0) {
+            std::vector<wifi_ap_record_t> ap_records(ap_num);
+            if (esp_wifi_scan_get_ap_records(&ap_num, ap_records.data()) == ESP_OK) {
+                // 按 rssi 降序排序
+                std::sort(ap_records.begin(), ap_records.end(), [](const wifi_ap_record_t& a, const wifi_ap_record_t& b) {
+                    return a.rssi > b.rssi;
+                });
+                // 只保留前 MAX_WIFI_SCAN_SSID_COUNT 个
+                int count = std::min<int>(ap_num, MAX_WIFI_SCAN_SSID_COUNT);
+                for (int i = 0; i < count; ++i) {
+                    std::string ssid(reinterpret_cast<char*>(ap_records[i].ssid));
+                    scan_ssid_list.push_back(ssid);
+                    // ESP_LOGI(TAG, "Scanned SSID: %s RSSI: %d", ssid.c_str(), ap_records[i].rssi);
+                }
+            }
+        }
+        SsidManager::GetInstance().ScanSsidList(scan_ssid_list);
     }
 }
 

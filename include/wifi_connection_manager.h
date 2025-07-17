@@ -6,6 +6,7 @@
 #include <esp_wifi.h>
 #include <esp_event.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 
 // 定义事件位
 #define WIFI_CONNECTED_BIT BIT0
@@ -40,10 +41,14 @@ private:
 
     static void WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
     static void IpEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
+    void StartScanTimer();
+    void StopScanTimer();
+    static void ScanTimerCallback(void* arg);
 
     EventGroupHandle_t event_group_;
     bool is_connecting_;
     esp_event_handler_instance_t instance_any_id_;
     esp_event_handler_instance_t instance_got_ip_;
+    esp_timer_handle_t scan_timer_ = nullptr;
     static const char* TAG;
 }; 

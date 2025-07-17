@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
+ #include "ssid_manager_c.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -118,6 +118,24 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                 if (result.success) {
                     ESP_LOGI(TAG, "Parsed command: %d\n %d", result.cmd, CMD_WIFI_CONFIG);
                     switch (result.cmd) {
+                        case CMD_GET_WIFI_LIST: {
+                            ESP_LOGI(TAG, "CMD_GET_WIFI_LIST");
+                            const char* ssid_list_json = ssid_manager_get_scan_ssid_list_json();
+                            ESP_LOGI(TAG, "ssid_list_json: %s", ssid_list_json);
+                            size_t json_len = strlen(ssid_list_json);
+                            // BLE 分包发送
+                            void ble_send_frame_cb(const uint8_t* frame, size_t frame_len, void* user_data) {
+                                ESP_LOGI(TAG, "ble_send_frame_cb");
+                                ble_send_notify(frame, frame_len);
+                            }
+                            pack_and_send_wifi_list_response(
+                                result.msg_id,
+                                CMD_WIFI_LIST_RESP,
+                                (const uint8_t*)ssid_list_json, json_len,
+                                ble_send_frame_cb, NULL
+                            );
+                            break;
+                        }
                         case CMD_WIFI_CONFIG:
                             // 使用解析后的WiFi配置数据
                             wifi_config_t *wifi_config = &result.data.wifi_config;
@@ -311,6 +329,7 @@ static void print_received_data(const uint8_t *data, size_t len, bool is_no_resp
     }
     
 }
+
 
 uint16_t get_notify_chr_val_handle() {
     return notify_chr_val_handle;

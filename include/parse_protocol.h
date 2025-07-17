@@ -12,6 +12,7 @@
 
 // CMD 指令定义
 #define CMD_WIFI_CONFIG 0x40        // WiFi配置指令
+#define CMD_GET_WIFI_LIST 0x45        // WiFi配置指令
 
 // WiFi配置结构体
 typedef struct {

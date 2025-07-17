@@ -17,7 +17,7 @@ extern "C" {
 #define BLE_GAP_APPEARANCE_GENERIC_TAG 0x0200
 #define BLE_GAP_LE_ROLE_PERIPHERAL 0x00
 #define BLE_GAP_URI_PREFIX_HTTPS 0x17
-#define VERSION_NUMBER      0x05    // 版本号为 5
+#define VERSION_NUMBER      0x06    // 版本号为 5
 #define DEVICE_TYPE_GATT   0x0B    // GATT 设备类型 (0b1011)
 #define VERSION_TYPE       ((DEVICE_TYPE_GATT << 4) | VERSION_NUMBER)
 

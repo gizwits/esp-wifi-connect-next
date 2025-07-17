@@ -3,6 +3,8 @@
 // #include "config.h"
 #include "esp_log.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 static const char *TAG = "PACK_PROTO";
 
 // WiFi配置响应包结构
@@ -41,4 +43,35 @@ size_t pack_wifi_config_response(uint8_t frame_seq,uint8_t msg_id, uint8_t statu
              status, frame_seq);
 
     return sizeof(wifi_config_response_t);
+}
+
+void pack_and_send_wifi_list_response(
+    uint8_t msg_id,
+    uint8_t cmd,
+    const uint8_t* payload, size_t payload_len,
+    ble_frame_send_cb cb, void* user_data
+) {
+    if (!payload && payload_len > 0) return;
+    uint8_t ver = 0b00; // 机智云数据点协议
+    uint8_t reserved = 0;
+    uint8_t total_frames = (payload_len + BLE_FRAME_MAX_PAYLOAD - 1) / BLE_FRAME_MAX_PAYLOAD;
+    if (total_frames == 0) total_frames = 1;
+    ESP_LOGI(TAG, "total_frames: %d, payload_len: %d", total_frames, payload_len);
+    for (uint8_t seq = 0; seq < total_frames; ++seq) {
+        size_t offset = seq * BLE_FRAME_MAX_PAYLOAD;
+        size_t this_len = (payload_len - offset > BLE_FRAME_MAX_PAYLOAD) ? BLE_FRAME_MAX_PAYLOAD : (payload_len - offset);
+
+        uint8_t frame[BLE_HEADER_LEN + BLE_FRAME_MAX_PAYLOAD];
+        // Header
+        frame[0] = ((msg_id & 0x1F) | ((ver & 0x03) << 5) | ((reserved & 0x01) << 7));
+        frame[1] = cmd;
+        frame[2] = ((seq & 0x0F) | (((total_frames - 1) & 0x0F) << 4));
+        frame[3] = this_len;
+        // Payload
+        if (this_len > 0) {
+            memcpy(&frame[BLE_HEADER_LEN], payload + offset, this_len);
+        }
+        cb(frame, BLE_HEADER_LEN + this_len, user_data);
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 }

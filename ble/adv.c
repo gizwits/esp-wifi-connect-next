@@ -147,6 +147,8 @@ ble_multi_adv_gap_event(struct ble_gap_event *event, void *arg)
             ble_set_conn_handle(event->connect.conn_handle);
             ble_multi_adv_print_conn_desc(&desc);
             ble_multi_perform_gatt_proc(desc.our_id_addr);
+            ble_gattc_exchange_mtu(event->connect.conn_handle, NULL, NULL);
+
         }
         MODLOG_DFLT(INFO, "\n");
         return 0;
@@ -156,8 +158,8 @@ ble_multi_adv_gap_event(struct ble_gap_event *event, void *arg)
         ble_multi_adv_print_conn_desc(&event->disconnect.conn);
         MODLOG_DFLT(INFO, "\n");
         ble_set_conn_handle(BLE_HS_CONN_HANDLE_NONE);
-        ble_multi_advertise(event->disconnect.conn.our_id_addr);
-
+        // ble_multi_advertise(event->disconnect.conn.our_id_addr);
+        start_connectable_ext();
         return 0;
 
     case BLE_GAP_EVENT_CONN_UPDATE:

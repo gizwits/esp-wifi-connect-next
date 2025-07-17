@@ -123,3 +123,11 @@ void SsidManager::SetDefaultSsid(int index) {
     ssid_list_.insert(ssid_list_.begin(), item);
     SaveToNvs();
 }
+
+// 新增：保存扫描到的 SSID 列表（不保存密码）
+std::vector<std::string> scan_ssid_list_;
+
+void SsidManager::ScanSsidList(const std::vector<std::string>& ssid_list) {
+    scan_ssid_list_ = ssid_list;
+    ESP_LOGI(TAG, "ScanSsidList updated, count: %d", (int)scan_ssid_list_.size());
+}

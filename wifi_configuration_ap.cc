@@ -45,10 +45,6 @@ WifiConfigurationAp::WifiConfigurationAp()
 
 WifiConfigurationAp::~WifiConfigurationAp()
 {
-    if (scan_timer_) {
-        esp_timer_stop(scan_timer_);
-        esp_timer_delete(scan_timer_);
-    }
     if (event_group_) {
         vEventGroupDelete(event_group_);
     }
@@ -93,20 +89,6 @@ void WifiConfigurationAp::Start()
     
     // Start scan immediately
     esp_wifi_scan_start(nullptr, false);
-    // Setup periodic WiFi scan timer
-    esp_timer_create_args_t timer_args = {
-        .callback = [](void* arg) {
-            auto* self = static_cast<WifiConfigurationAp*>(arg);
-            if (!self->is_connecting_) {
-                esp_wifi_scan_start(nullptr, false);
-            }
-        },
-        .arg = this,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "wifi_scan_timer",
-        .skip_unhandled_events = true
-    };
-    ESP_ERROR_CHECK(esp_timer_create(&timer_args, &scan_timer_));
 #endif
 }
 
@@ -914,16 +896,6 @@ void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_bas
         xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupSetBits(self->event_group_, WIFI_FAIL_BIT);
-    } else if (event_id == WIFI_EVENT_SCAN_DONE) {
-        std::lock_guard<std::mutex> lock(self->mutex_);
-        uint16_t ap_num = 0;
-        esp_wifi_scan_get_ap_num(&ap_num);
-
-        self->ap_records_.resize(ap_num);
-        esp_wifi_scan_get_ap_records(&ap_num, self->ap_records_.data());
-
-        // 扫描完成，等待10秒后再次扫描
-        esp_timer_start_once(self->scan_timer_, 10 * 1000000);
     }
 }
 
@@ -998,13 +970,6 @@ void WifiConfigurationAp::Stop() {
         sc_event_instance_ = nullptr;
     }
     esp_smartconfig_stop();
-
-    // 停止定时器
-    if (scan_timer_) {
-        esp_timer_stop(scan_timer_);
-        esp_timer_delete(scan_timer_);
-        scan_timer_ = nullptr;
-    }
 
     // 停止Web服务器
     if (server_) {
