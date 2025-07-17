@@ -9,6 +9,14 @@ struct SsidItem {
     std::string password;
 };
 
+// 新增：包含RSSI信息的SSID结构体
+struct SsidRssiItem {
+    std::string ssid;
+    int8_t rssi;
+    
+    SsidRssiItem(const std::string& s, int8_t r) : ssid(s), rssi(r) {}
+};
+
 class SsidManager {
 public:
     static SsidManager& GetInstance() {
@@ -22,14 +30,11 @@ public:
     void Clear();
     const std::vector<SsidItem>& GetSsidList() const { return ssid_list_; }
 
-    // 新增：保存扫描到的 SSID 列表（不保存密码）
-    void ScanSsidList(const std::vector<std::string>& ssid_list);
+    // 新增：保存带RSSI的扫描结果
+    void ScanSsidRssiList(const std::vector<SsidRssiItem>& ssid_rssi_list);
 
-    // 获取扫描到的 SSID 列表
-    const std::vector<std::string>& GetScanSsidList() const { return scan_ssid_list_; }
-
-    // 获取扫描到的 SSID 列表（标准 getter 命名）
-    const std::vector<std::string>& get_scan_ssid_list() const { return scan_ssid_list_; }
+    // 新增：获取带RSSI的扫描结果
+    const std::vector<SsidRssiItem>& GetScanSsidRssiList() const { return scan_ssid_rssi_list_; }
 
 private:
     SsidManager();
@@ -39,8 +44,8 @@ private:
     void SaveToNvs();
 
     std::vector<SsidItem> ssid_list_;
-    // 新增：保存扫描到的 SSID 列表（不保存密码）
-    std::vector<std::string> scan_ssid_list_;
+    // 新增：保存带RSSI的扫描结果
+    std::vector<SsidRssiItem> scan_ssid_rssi_list_;
 };
 
 #endif // SSID_MANAGER_H

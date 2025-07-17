@@ -120,8 +120,9 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                     switch (result.cmd) {
                         case CMD_GET_WIFI_LIST: {
                             ESP_LOGI(TAG, "CMD_GET_WIFI_LIST");
-                            const char* ssid_list_json = ssid_manager_get_scan_ssid_list_json();
-                            ESP_LOGI(TAG, "ssid_list_json: %s", ssid_list_json);
+                            // 使用新的带RSSI的函数
+                            const char* ssid_list_json = ssid_manager_get_scan_ssid_rssi_list_json();
+                            ESP_LOGI(TAG, "ssid_list_json with RSSI: %s", ssid_list_json);
                             size_t json_len = strlen(ssid_list_json);
                             // BLE 分包发送
                             void ble_send_frame_cb(const uint8_t* frame, size_t frame_len, void* user_data) {

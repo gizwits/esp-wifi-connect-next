@@ -124,10 +124,8 @@ void SsidManager::SetDefaultSsid(int index) {
     SaveToNvs();
 }
 
-// 新增：保存扫描到的 SSID 列表（不保存密码）
-std::vector<std::string> scan_ssid_list_;
-
-void SsidManager::ScanSsidList(const std::vector<std::string>& ssid_list) {
-    scan_ssid_list_ = ssid_list;
-    ESP_LOGI(TAG, "ScanSsidList updated, count: %d", (int)scan_ssid_list_.size());
+// 新增：保存带RSSI的扫描结果
+void SsidManager::ScanSsidRssiList(const std::vector<SsidRssiItem>& ssid_rssi_list) {
+    scan_ssid_rssi_list_ = ssid_rssi_list;
+    ESP_LOGI(TAG, "ScanSsidRssiList updated, count: %d", (int)scan_ssid_rssi_list_.size());
 }
