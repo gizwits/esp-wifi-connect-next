@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-bool WifiConnectionManager_Connect(const char* ssid, const char* password);
+esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password);
 void WifiConnectionManager_SaveCredentials(const char* ssid, const char* password);
 
 #ifdef __cplusplus
@@ -29,7 +29,7 @@ public:
 
     static esp_err_t InitializeWiFi();
 
-    bool Connect(const std::string& ssid, const std::string& password);
+    esp_err_t Connect(const std::string& ssid, const std::string& password);
     void Disconnect();
     void SaveUid(const std::string& uid);
     bool IsConnected() const;
@@ -44,11 +44,25 @@ private:
     void StartScanTimer();
     void StopScanTimer();
     static void ScanTimerCallback(void* arg);
+    static const char* GetDisconnectReasonString(wifi_err_reason_t reason);
 
     EventGroupHandle_t event_group_;
     bool is_connecting_;
     esp_event_handler_instance_t instance_any_id_;
     esp_event_handler_instance_t instance_got_ip_;
     esp_timer_handle_t scan_timer_ = nullptr;
+    
+    // 错误统计相关
+    struct {
+        esp_err_t error;
+        wifi_err_reason_t disconnect_reason;
+        int count;
+        int last_occurrence;
+        bool is_disconnect_error;
+    } error_stats_[10];
+    int error_stats_count_;
+    int current_retry_count_;
+    
     static const char* TAG;
+    
 }; 

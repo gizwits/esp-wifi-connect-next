@@ -20,10 +20,12 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include "wifi_manager_c.h"
 #include "ble.h"
 #include "host/ble_hs.h"
 #include "host/ble_uuid.h"
 #include "host/util/util.h"
+#include "esp_log.h"
 
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
@@ -49,6 +51,9 @@
 uint16_t notify_chr_val_handle;  // 保存通知特征值的句柄
 
 int is_connecting = 0;
+
+// 外部变量声明
+extern uint16_t conn_handle;
 
 static int gatt_svr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
                void *dst, uint16_t *len);
@@ -88,6 +93,98 @@ typedef struct {
 //     // 删除自己
 //     vTaskDelete(NULL);
 // }
+
+
+void process_wifi_config(const char* ssid, const char* password, const char* uid) {
+    if (ssid && password) {
+        // 使用 WiFi 连接管理器进行连接
+        esp_err_t ret = WifiConnectionManager_Connect(ssid, password);
+        if (ret == ESP_OK) {
+            // 连接成功，保存数据
+            WifiConnectionManager_SaveCredentials(ssid, password);
+            if (uid) {
+                WifiConnectionManager_SaveUid(uid);
+            }
+            
+            // 发送配网状态通知：正在进行设备注册
+            uint8_t response[256];  // 足够大的缓冲区
+            size_t resp_len = pack_wifi_config_state_notification(
+                0,  // frame_seq
+                MSG_ID_DATA_POINT,  // msg_id
+                EVENT_CLOUD_CONNECTED,  // status
+                "Device registration in progress",  // log_content
+                strlen("Device registration in progress"),  // log_len
+                response,
+                sizeof(response)
+            );
+            
+            if (resp_len > 0) {
+                // 发送状态通知
+                ble_send_notify(response, resp_len);
+                ESP_LOGI(TAG, "Sent EVENT_REGISTERING notification");
+            }
+            
+            // 重启
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+        } else {
+            // 连接失败
+            ESP_LOGE(TAG, "Failed to connect to WiFi, error: %s", esp_err_to_name(ret));
+            
+            // 检查是否为密码错误
+            const char* error_type = "WiFi connection failed";
+            if (ret == ESP_ERR_WIFI_PASSWORD_INCORRECT) {
+                error_type = "Incorrect WiFi password";
+                ESP_LOGE(TAG, "Password error detected: %s", esp_err_to_name(ret));
+            }
+            
+            // 发送配网状态通知：连接Wi-Fi失败
+            char error_msg[128];
+            snprintf(error_msg, sizeof(error_msg), "%s", error_type);
+            
+            uint8_t response[256];
+            size_t resp_len = pack_wifi_config_state_notification(
+                0,  // frame_seq
+                MSG_ID_DATA_POINT,  // msg_id
+                EVENT_CONNECT_ROUTER_FAILED,  // status
+                error_msg,  // log_content
+                strlen(error_msg),  // log_len
+                response,
+                sizeof(response)
+            );
+            
+            if (resp_len > 0) {
+                ble_send_notify(response, resp_len);
+                ESP_LOGI(TAG, "Sent EVENT_CONNECT_ROUTER_FAILED notification");
+            }
+
+            // 主动断开连接
+            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+                ESP_LOGI(TAG, "Disconnecting BLE connection, handle: %d", conn_handle);
+                ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+            }
+        }
+    } else {
+        ESP_LOGE(TAG, "Invalid WiFi config parameters");
+        
+        // 发送配网状态通知：解析配置包失败
+        uint8_t response[256];
+        size_t resp_len = pack_wifi_config_state_notification(
+            0,  // frame_seq
+            MSG_ID_DATA_POINT,  // msg_id
+            EVENT_INVALID_ONBOARDING_PKG,  // status
+            "Invalid WiFi config parameters",  // log_content
+            strlen("Invalid WiFi config parameters"),  // log_len
+            response,
+            sizeof(response)
+        );
+        
+        if (resp_len > 0) {
+            ble_send_notify(response, resp_len);
+            ESP_LOGI(TAG, "Sent EVENT_INVALID_ONBOARDING_PKG notification");
+        }
+    }
+} 
 
 static int
 gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,

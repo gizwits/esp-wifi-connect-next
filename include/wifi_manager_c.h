@@ -5,13 +5,17 @@
 extern "C" {
 #endif
 
+#define ESP_ERR_WIFI_PASSWORD_INCORRECT 0x3008
+
+#include "esp_err.h"
+
 /**
  * @brief 连接WiFi
  * @param ssid WiFi名称
  * @param password WiFi密码
  * @return true 连接成功，false 连接失败
  */
-bool WifiConnectionManager_Connect(const char* ssid, const char* password);
+esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password);
 
 /**
  * @brief 保存WiFi凭证

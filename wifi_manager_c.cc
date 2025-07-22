@@ -6,7 +6,7 @@
 
 extern "C" {
 
-bool WifiConnectionManager_Connect(const char* ssid, const char* password) {
+esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password) {
     // Notify that WiFi connection is being attempted
     WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
         "Attempting to connect to WiFi: " + std::string(ssid));

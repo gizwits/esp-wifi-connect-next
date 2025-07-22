@@ -45,28 +45,6 @@ bool is_init = false;
 
 void ble_store_config_init(void);
 
-
-void process_wifi_config(const char* ssid, const char* password, const char* uid) {
-    if (ssid && password) {
-        // 使用 WiFi 连接管理器进行连接
-        if (WifiConnectionManager_Connect(ssid, password)) {
-            // 连接成功，保存数据
-            WifiConnectionManager_SaveCredentials(ssid, password);
-            if (uid) {
-                WifiConnectionManager_SaveUid(uid);
-            }
-            // 重启
-            vTaskDelay(pdMS_TO_TICKS(500));
-            esp_restart();
-        } else {
-            // 连接失败 TODO
-            ESP_LOGE(tag, "Failed to connect to WiFi");
-        }
-    } else {
-        ESP_LOGE(tag, "Invalid WiFi config parameters");
-    }
-} 
-
 static struct os_mbuf *
 ext_get_data(uint8_t ext_adv_pattern[], int size)
 {
