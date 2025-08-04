@@ -68,9 +68,13 @@ void WifiStation::Stop() {
         instance_got_ip_ = nullptr;
     }
 
+    // 清除连接状态标志位
+    xEventGroupClearBits(event_group_, WIFI_EVENT_CONNECTED);
+
     // Reset the WiFi stack
     ESP_ERROR_CHECK(esp_wifi_stop());
     ESP_ERROR_CHECK(esp_wifi_deinit());
+    ESP_LOGI(TAG, "WifiStation stopped");
 }
 
 void WifiStation::OnScanBegin(std::function<void()> on_scan_begin) {
