@@ -260,6 +260,50 @@ void WifiStation::SetPowerSaveMode(bool enabled) {
     ESP_ERROR_CHECK(esp_wifi_set_ps(enabled ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE));
 }
 
+
+bool WifiStation::ConnectToWifi(const std::string& ssid, const std::string& password) {
+    ESP_LOGI(TAG, "临时连接WiFi: %s", ssid.c_str());
+    
+    // 清空连接队列，避免干扰
+    connect_queue_.clear();
+    
+    // 设置当前要连接的SSID和密码
+    ssid_ = ssid;
+    password_ = password;
+    
+    // 设置回调函数（如果已设置）
+    if (on_connect_) {
+        on_connect_(ssid_);
+    }
+    
+    // 配置WiFi
+    wifi_config_t wifi_config;
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    
+    strcpy((char*)wifi_config.sta.ssid, ssid.c_str());
+    strcpy((char*)wifi_config.sta.password, password.c_str());
+    
+    esp_err_t ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "设置WiFi配置失败: %s", esp_err_to_name(ret));
+        return false;
+    }
+    
+    // 重置重连计数
+    reconnect_count_ = 0;
+    
+    // 开始连接
+    ret = esp_wifi_connect();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "连接WiFi失败: %s", esp_err_to_name(ret));
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "WiFi连接请求已发送");
+    return true;
+}
+
+
 // Static event handler functions
 void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     auto* this_ = static_cast<WifiStation*>(arg);

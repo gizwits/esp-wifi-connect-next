@@ -31,6 +31,10 @@ public:
     uint8_t GetChannel();
     void SetPowerSaveMode(bool enabled);
 
+    
+    // 临时连接指定WiFi
+    bool ConnectToWifi(const std::string& ssid, const std::string& password);
+
     void OnConnect(std::function<void(const std::string& ssid)> on_connect);
     void OnConnected(std::function<void(const std::string& ssid)> on_connected);
     void OnScanBegin(std::function<void()> on_scan_begin);
