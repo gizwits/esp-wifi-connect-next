@@ -16,6 +16,9 @@
 #define WIFI_EVENT_CONNECTED BIT0
 #define MAX_RECONNECT_COUNT 5
 
+// 静态变量定义
+bool WifiStation::netif_initialized_ = false;
+
 WifiStation& WifiStation::GetInstance() {
     static WifiStation instance;
     return instance;
@@ -71,10 +74,15 @@ void WifiStation::Stop() {
     // 清除连接状态标志位
     xEventGroupClearBits(event_group_, WIFI_EVENT_CONNECTED);
 
-    // Reset the WiFi stack
+    // 清理连接队列
+    connect_queue_.clear();
+    reconnect_count_ = 0;
+
+    // 只停止 wifi，不销毁 netif
     ESP_ERROR_CHECK(esp_wifi_stop());
-    ESP_ERROR_CHECK(esp_wifi_deinit());
-    ESP_LOGI(TAG, "WifiStation stopped");
+    // 注意：不调用 esp_wifi_deinit()，保持 wifi 栈初始化状态
+    
+    ESP_LOGI(TAG, "WifiStation stopped (wifi stack preserved)");
 }
 
 void WifiStation::OnScanBegin(std::function<void()> on_scan_begin) {
@@ -90,6 +98,17 @@ void WifiStation::OnConnected(std::function<void(const std::string& ssid)> on_co
 }
 
 void WifiStation::Start() {
+    // 检查是否已经启动
+    if (timer_handle_ != nullptr) {
+        ESP_LOGW(TAG, "WifiStation already started");
+        return;
+    }
+
+    // 清除连接状态
+    xEventGroupClearBits(event_group_, WIFI_EVENT_CONNECTED);
+    connect_queue_.clear();
+    reconnect_count_ = 0;
+
     // Initialize the TCP/IP stack
     ESP_ERROR_CHECK(esp_netif_init());
 
@@ -104,15 +123,29 @@ void WifiStation::Start() {
                                                         this,
                                                         &instance_got_ip_));
 
-    // Create the default event loop
-    esp_netif_create_default_wifi_sta();
+    // 只在第一次启动时创建默认的 wifi sta netif
+    if (!netif_initialized_) {
+        esp_netif_create_default_wifi_sta();
+        netif_initialized_ = true;
+        ESP_LOGI(TAG, "Created default wifi sta netif");
+    }
 
-    // Initialize the WiFi stack in station mode
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    cfg.nvs_enable = false;
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
+    // 检查 wifi 栈是否已经初始化
+    wifi_mode_t mode;
+    esp_err_t err = esp_wifi_get_mode(&mode);
+    if (err == ESP_ERR_WIFI_NOT_INIT) {
+        // WiFi 栈未初始化，需要初始化
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        cfg.nvs_enable = false;
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_LOGI(TAG, "Initialized wifi stack");
+    } else {
+        // WiFi 栈已经初始化，只需要重新启动
+        ESP_ERROR_CHECK(esp_wifi_start());
+        ESP_LOGI(TAG, "Restarted existing wifi stack");
+    }
 
     if (max_tx_power_ != 0) {
         ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(max_tx_power_));

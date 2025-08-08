@@ -6,6 +6,6 @@ files:
   - .git
   - dist
 license: MIT
-repository: https://github.com/gizwits/esp-wifi-connect-next
+r1epository: https://github.com/gizwits/esp-wifi-connect-next
 url: https://github.com/gizwits/esp-wifi-connect-next
-version: 3.0.8
+version: 3.1.0

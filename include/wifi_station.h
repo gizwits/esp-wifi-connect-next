@@ -42,6 +42,7 @@ private:
     WifiStation& operator=(const WifiStation&) = delete;
 
     EventGroupHandle_t event_group_;
+    static bool netif_initialized_;
     esp_timer_handle_t timer_handle_ = nullptr;
     esp_event_handler_instance_t instance_any_id_ = nullptr;
     esp_event_handler_instance_t instance_got_ip_ = nullptr;
