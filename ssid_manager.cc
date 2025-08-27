@@ -42,9 +42,15 @@ void SsidManager::LoadFromNvs() {
         if (i > 0) {
             password_key += std::to_string(i);
         }
+        std::string bssid_key = "bssid";
+        if (i > 0) {
+            bssid_key += std::to_string(i);
+        }
         
         char ssid[33];
         char password[65];
+        char bssid[18];  // "xx:xx:xx:xx:xx:xx" + '\0'
+        
         size_t length = sizeof(ssid);
         if (nvs_get_str(nvs_handle, ssid_key.c_str(), ssid, &length) != ESP_OK) {
             continue;
@@ -53,7 +59,14 @@ void SsidManager::LoadFromNvs() {
         if (nvs_get_str(nvs_handle, password_key.c_str(), password, &length) != ESP_OK) {
             continue;
         }
-        ssid_list_.push_back({ssid, password});
+        
+        // BSSID 是可选的，如果不存在则使用空字符串（兼容旧数据）
+        length = sizeof(bssid);
+        if (nvs_get_str(nvs_handle, bssid_key.c_str(), bssid, &length) != ESP_OK) {
+            bssid[0] = '\0';  // 旧数据没有 BSSID，设置为空字符串
+        }
+        
+        ssid_list_.push_back({ssid, password, bssid});
     }
     nvs_close(nvs_handle);
 }
@@ -70,25 +83,42 @@ void SsidManager::SaveToNvs() {
         if (i > 0) {
             password_key += std::to_string(i);
         }
+        std::string bssid_key = "bssid";
+        if (i > 0) {
+            bssid_key += std::to_string(i);
+        }
         
         if (i < ssid_list_.size()) {
             nvs_set_str(nvs_handle, ssid_key.c_str(), ssid_list_[i].ssid.c_str());
             nvs_set_str(nvs_handle, password_key.c_str(), ssid_list_[i].password.c_str());
+            // 只有在 BSSID 非空时才保存，保持向后兼容
+            if (!ssid_list_[i].bssid.empty()) {
+                nvs_set_str(nvs_handle, bssid_key.c_str(), ssid_list_[i].bssid.c_str());
+            } else {
+                // 如果 BSSID 为空，删除可能存在的旧 BSSID 键
+                nvs_erase_key(nvs_handle, bssid_key.c_str());
+            }
         } else {
             nvs_erase_key(nvs_handle, ssid_key.c_str());
             nvs_erase_key(nvs_handle, password_key.c_str());
+            nvs_erase_key(nvs_handle, bssid_key.c_str());
         }
     }
     nvs_commit(nvs_handle);
     nvs_close(nvs_handle);
 }
 
-void SsidManager::AddSsid(const std::string& ssid, const std::string& password) {
+void SsidManager::AddSsid(const std::string& ssid, const std::string& password, const std::string& bssid) {
     for (auto& item : ssid_list_) {
         ESP_LOGI(TAG, "compare [%s:%d] [%s:%d]", item.ssid.c_str(), item.ssid.size(), ssid.c_str(), ssid.size());
         if (item.ssid == ssid) {
             ESP_LOGW(TAG, "SSID %s already exists, overwrite it", ssid.c_str());
             item.password = password;
+            // 更新 BSSID（如果提供了新的 BSSID）
+            if (!bssid.empty()) {
+                item.bssid = bssid;
+                ESP_LOGI(TAG, "Updated BSSID: %s", bssid.c_str());
+            }
             SaveToNvs();
             return;
         }
@@ -99,7 +129,12 @@ void SsidManager::AddSsid(const std::string& ssid, const std::string& password) 
         ssid_list_.pop_back();
     }
     // Add the new ssid to the front of the list
-    ssid_list_.insert(ssid_list_.begin(), {ssid, password});
+    ssid_list_.insert(ssid_list_.begin(), {ssid, password, bssid});
+    if (!bssid.empty()) {
+        ESP_LOGI(TAG, "Added new SSID %s with BSSID: %s", ssid.c_str(), bssid.c_str());
+    } else {
+        ESP_LOGI(TAG, "Added new SSID %s without BSSID", ssid.c_str());
+    }
     SaveToNvs();
 }
 
@@ -118,7 +153,7 @@ void SsidManager::SetDefaultSsid(int index) {
         return;
     }
     // Move the ssid at index to the front of the list
-    auto item = ssid_list_[index];
+    auto item = ssid_list_[index];  // 这里自动拷贝整个结构，包括 bssid
     ssid_list_.erase(ssid_list_.begin() + index);
     ssid_list_.insert(ssid_list_.begin(), item);
     SaveToNvs();

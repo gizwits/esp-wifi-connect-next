@@ -13,9 +13,18 @@ extern "C" {
  * @brief 连接WiFi
  * @param ssid WiFi名称
  * @param password WiFi密码
- * @return true 连接成功，false 连接失败
+ * @return ESP_OK 连接成功，其他值表示失败
  */
 esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password);
+
+/**
+ * @brief 连接WiFi并返回BSSID
+ * @param ssid WiFi名称
+ * @param password WiFi密码
+ * @param bssid_out 输出BSSID字符串（格式：xx:xx:xx:xx:xx:xx），缓冲区至少18字节
+ * @return ESP_OK 连接成功，其他值表示失败
+ */
+esp_err_t WifiConnectionManager_ConnectWithBssid(const char* ssid, const char* password, char* bssid_out);
 
 /**
  * @brief 保存WiFi凭证
@@ -23,6 +32,14 @@ esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password);
  * @param password WiFi密码
  */
 void WifiConnectionManager_SaveCredentials(const char* ssid, const char* password);
+
+/**
+ * @brief 保存WiFi凭证（包含BSSID）
+ * @param ssid WiFi名称
+ * @param password WiFi密码
+ * @param bssid BSSID字符串（格式：xx:xx:xx:xx:xx:xx）
+ */
+void WifiConnectionManager_SaveCredentialsWithBssid(const char* ssid, const char* password, const char* bssid);
 
 /**
  * @brief 保存用户ID

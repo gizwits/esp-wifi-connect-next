@@ -1,5 +1,6 @@
 #include "wifi_station.h"
 #include <cstring>
+#include <cstdio>
 #include <algorithm>
 
 #include <freertos/FreeRTOS.h>
@@ -51,7 +52,7 @@ WifiStation::~WifiStation() {
 
 void WifiStation::AddAuth(const std::string &&ssid, const std::string &&password) {
     auto& ssid_manager = SsidManager::GetInstance();
-    ssid_manager.AddSsid(ssid, password);
+    ssid_manager.AddSsid(ssid, password);  // 使用默认的空 BSSID
 }
 
 void WifiStation::ClearAuth() {
@@ -159,7 +160,14 @@ void WifiStation::Start() {
     // Setup the timer to scan WiFi
     esp_timer_create_args_t timer_args = {
         .callback = [](void* arg) {
-            esp_wifi_scan_start(nullptr, false);
+            // 配置扫描参数，显示隐藏的 SSID
+            wifi_scan_config_t scan_config = {
+                .ssid = NULL,
+                .bssid = NULL,
+                .channel = 0,
+                .show_hidden = true,  // 显示隐藏的 WiFi
+            };
+            esp_wifi_scan_start(&scan_config, false);
         },
         .arg = this,
         .dispatch_method = ESP_TIMER_TASK,
@@ -188,14 +196,34 @@ void WifiStation::HandleScanResult() {
     auto ssid_list = ssid_manager.GetSsidList();
     for (int i = 0; i < ap_num; i++) {
         auto ap_record = ap_records[i];
-        auto it = std::find_if(ssid_list.begin(), ssid_list.end(), [ap_record](const SsidItem& item) {
-            return strcmp((char *)ap_record.ssid, item.ssid.c_str()) == 0;
+        
+        // 将 BSSID 转换为字符串格式以便比较
+        char bssid_str[18];
+        sprintf(bssid_str, "%02x:%02x:%02x:%02x:%02x:%02x",
+            ap_record.bssid[0], ap_record.bssid[1], ap_record.bssid[2],
+            ap_record.bssid[3], ap_record.bssid[4], ap_record.bssid[5]);
+        
+        // 查找匹配的 SSID 配置
+        auto it = std::find_if(ssid_list.begin(), ssid_list.end(), [&ap_record, &bssid_str](const SsidItem& item) {
+            // 1. 原有规则：SSID 匹配
+            if (strlen((char *)ap_record.ssid) > 0 && strcmp((char *)ap_record.ssid, item.ssid.c_str()) == 0) {
+                return true;
+            }
+            
+            // 2. 新规则：对于隐藏 WiFi（SSID 为空），通过 BSSID 匹配
+            if (strlen((char *)ap_record.ssid) == 0 && !item.bssid.empty() && 
+                strcasecmp(bssid_str, item.bssid.c_str()) == 0) {
+                ESP_LOGI(TAG, "Hidden WiFi matched by BSSID: %s", bssid_str);
+                return true;
+            }
+            
+            return false;
         });
+        
         if (it != ssid_list.end()) {
-            ESP_LOGI(TAG, "Found AP: %s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x, RSSI: %d, Channel: %d, Authmode: %d",
-                (char *)ap_record.ssid, 
-                ap_record.bssid[0], ap_record.bssid[1], ap_record.bssid[2],
-                ap_record.bssid[3], ap_record.bssid[4], ap_record.bssid[5],
+            ESP_LOGI(TAG, "Found AP: %s, BSSID: %s, RSSI: %d, Channel: %d, Authmode: %d",
+                strlen((char *)ap_record.ssid) > 0 ? (char *)ap_record.ssid : "[HIDDEN]", 
+                bssid_str,
                 ap_record.rssi, ap_record.primary, ap_record.authmode);
             WifiApRecord record = {
                 .ssid = it->ssid,
@@ -211,7 +239,7 @@ void WifiStation::HandleScanResult() {
 
     if (connect_queue_.empty()) {
         ESP_LOGI(TAG, "Wait for next scan");
-        esp_timer_start_once(timer_handle_, 10 * 1000);
+        esp_timer_start_once(timer_handle_, 10 * 1000 * 1000);  // 10 秒（单位是微秒）
         return;
     }
 
@@ -269,7 +297,14 @@ void WifiStation::SetPowerSaveMode(bool enabled) {
 void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     auto* this_ = static_cast<WifiStation*>(arg);
     if (event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_scan_start(nullptr, false);
+        // 配置扫描参数，显示隐藏的 SSID
+        wifi_scan_config_t scan_config = {
+            .ssid = NULL,
+            .bssid = NULL,
+            .channel = 0,
+            .show_hidden = true,  // 显示隐藏的 WiFi
+        };
+        esp_wifi_scan_start(&scan_config, false);
         if (this_->on_scan_begin_) {
             this_->on_scan_begin_();
         }
@@ -290,7 +325,7 @@ void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32
         }
         
         ESP_LOGI(TAG, "No more AP to connect, wait for next scan");
-        esp_timer_start_once(this_->timer_handle_, 10 * 1000);
+        esp_timer_start_once(this_->timer_handle_, 10 * 1000 * 1000);  // 10 秒（单位是微秒）
     } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
     }
 }

@@ -302,8 +302,9 @@ void WifiConfigurationAp::UdpServerTask(void* arg)
 
             // 使用WiFi连接管理器进行连接
             auto& wifi_manager = WifiConnectionManager::GetInstance();
-            if (wifi_manager.Connect(config.ssid, config.password)) {
-                wifi_manager.SaveCredentials(config.ssid, config.password);
+            char bssid[18];
+            if (wifi_manager.Connect(config.ssid, config.password, bssid) == ESP_OK) {
+                wifi_manager.SaveCredentials(config.ssid, config.password, std::string(bssid));
                 if (!config.uid.empty()) {
                     wifi_manager.SaveUid(config.uid);
                 }
@@ -613,8 +614,9 @@ void WifiConfigurationAp::StartWebServer()
 
             // 使用 WiFi 连接管理器进行连接
             auto& wifi_manager = WifiConnectionManager::GetInstance();
-            if (wifi_manager.Connect(ssid_str, password_str)) {
-                wifi_manager.SaveCredentials(ssid_str, password_str);
+            char bssid[18];
+            if (wifi_manager.Connect(ssid_str, password_str, bssid) == ESP_OK) {
+                wifi_manager.SaveCredentials(ssid_str, password_str, std::string(bssid));
                 if (!uid_str.empty()) {
                     wifi_manager.SaveUid(uid_str);
                 }
@@ -876,8 +878,9 @@ void WifiConfigurationAp::StartWebServer()
 bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::string &password)
 {
     auto& wifi_manager = WifiConnectionManager::GetInstance();
-    if (wifi_manager.Connect(ssid, password)) {
-        wifi_manager.SaveCredentials(ssid, password);
+    char bssid[18];
+    if (wifi_manager.Connect(ssid, password, bssid) == ESP_OK) {
+        wifi_manager.SaveCredentials(ssid, password, std::string(bssid));
         return true;
     }
     return false;

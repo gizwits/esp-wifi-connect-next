@@ -1,6 +1,7 @@
 #include "wifi_connection_manager.h"
 #include "ssid_manager.h"
 #include <string.h>
+#include <cstdio>  // Added for sprintf
 #include <nvs_flash.h>
 #include "wifi_manager_c.h"
 #include <algorithm> // Added for std::sort
@@ -94,7 +95,7 @@ void WifiConnectionManager::ScanTimerCallback(void* arg) {
     }
 }
 
-esp_err_t WifiConnectionManager::Connect(const std::string& ssid, const std::string& password) {
+esp_err_t WifiConnectionManager::Connect(const std::string& ssid, const std::string& password, char* bssid_out) {
     if (ssid.empty()) {
         ESP_LOGE(TAG, "SSID cannot be empty");
         return ESP_ERR_WIFI_SSID;
@@ -197,6 +198,21 @@ esp_err_t WifiConnectionManager::Connect(const std::string& ssid, const std::str
         EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
         if (bits & WIFI_CONNECTED_BIT) {
             ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
+            
+            // 获取连接后的 BSSID
+            if (bssid_out != nullptr) {
+                wifi_ap_record_t ap_info;
+                if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+                    sprintf(bssid_out, "%02x:%02x:%02x:%02x:%02x:%02x",
+                        ap_info.bssid[0], ap_info.bssid[1], ap_info.bssid[2],
+                        ap_info.bssid[3], ap_info.bssid[4], ap_info.bssid[5]);
+                    ESP_LOGI(TAG, "Connected to BSSID: %s", bssid_out);
+                } else {
+                    ESP_LOGW(TAG, "Failed to get AP info for BSSID");
+                    bssid_out[0] = '\0';  // 设置为空字符串
+                }
+            }
+            
             is_connecting_ = false;
             return ESP_OK;
         } else if (bits & WIFI_FAIL_BIT) {
@@ -377,9 +393,16 @@ bool WifiConnectionManager::IsConnected() const {
     return (xEventGroupGetBits(event_group_) & WIFI_CONNECTED_BIT) != 0;
 }
 
-void WifiConnectionManager::SaveCredentials(const std::string& ssid, const std::string& password) {
+void WifiConnectionManager::SaveCredentials(const std::string& ssid, const std::string& password, const std::string& bssid) {
     ESP_LOGI(TAG, "Save SSID %s", ssid.c_str());
-    SsidManager::GetInstance().AddSsid(ssid, password);
+    
+    if (!bssid.empty()) {
+        ESP_LOGI(TAG, "Saving with BSSID: %s", bssid.c_str());
+    } else {
+        ESP_LOGI(TAG, "Saving without BSSID");
+    }
+    
+    SsidManager::GetInstance().AddSsid(ssid, password, bssid);
 }
 
 void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {

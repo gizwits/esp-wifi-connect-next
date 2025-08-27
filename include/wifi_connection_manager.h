@@ -17,7 +17,9 @@ extern "C" {
 #endif
 
 esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password);
+esp_err_t WifiConnectionManager_ConnectWithBssid(const char* ssid, const char* password, char* bssid_out);
 void WifiConnectionManager_SaveCredentials(const char* ssid, const char* password);
+void WifiConnectionManager_SaveCredentialsWithBssid(const char* ssid, const char* password, const char* bssid);
 
 #ifdef __cplusplus
 }
@@ -29,11 +31,11 @@ public:
 
     static esp_err_t InitializeWiFi();
 
-    esp_err_t Connect(const std::string& ssid, const std::string& password);
+    esp_err_t Connect(const std::string& ssid, const std::string& password, char* bssid_out = nullptr);
     void Disconnect();
     void SaveUid(const std::string& uid);
     bool IsConnected() const;
-    void SaveCredentials(const std::string& ssid, const std::string& password);
+    void SaveCredentials(const std::string& ssid, const std::string& password, const std::string& bssid = "");
 
 private:
     WifiConnectionManager();

@@ -7,6 +7,7 @@
 struct SsidItem {
     std::string ssid;
     std::string password;
+    std::string bssid;  // 新增 BSSID 字段，格式 "xx:xx:xx:xx:xx:xx"，空字符串表示无 BSSID
 };
 
 // 新增：包含RSSI信息的SSID结构体
@@ -24,7 +25,7 @@ public:
         return instance;
     }
 
-    void AddSsid(const std::string& ssid, const std::string& password);
+    void AddSsid(const std::string& ssid, const std::string& password, const std::string& bssid = "");
     void RemoveSsid(int index);
     void SetDefaultSsid(int index);
     void Clear();

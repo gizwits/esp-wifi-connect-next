@@ -98,10 +98,11 @@ typedef struct {
 void process_wifi_config(const char* ssid, const char* password, const char* uid) {
     if (ssid && password) {
         // 使用 WiFi 连接管理器进行连接
-        esp_err_t ret = WifiConnectionManager_Connect(ssid, password);
+        char bssid[18];
+        esp_err_t ret = WifiConnectionManager_ConnectWithBssid(ssid, password, bssid);
         if (ret == ESP_OK) {
-            // 连接成功，保存数据
-            WifiConnectionManager_SaveCredentials(ssid, password);
+            // 连接成功，保存数据（包含 BSSID）
+            WifiConnectionManager_SaveCredentialsWithBssid(ssid, password, bssid);
             if (uid) {
                 WifiConnectionManager_SaveUid(uid);
             }

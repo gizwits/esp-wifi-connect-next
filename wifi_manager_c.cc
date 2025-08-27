@@ -13,7 +13,20 @@ esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password) 
     
     return WifiConnectionManager::GetInstance().Connect(
         std::string(ssid), 
-        std::string(password)
+        std::string(password),
+        nullptr  // 不需要返回 BSSID
+    );
+}
+
+esp_err_t WifiConnectionManager_ConnectWithBssid(const char* ssid, const char* password, char* bssid_out) {
+    // Notify that WiFi connection is being attempted
+    WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
+        "Attempting to connect to WiFi: " + std::string(ssid));
+    
+    return WifiConnectionManager::GetInstance().Connect(
+        std::string(ssid), 
+        std::string(password),
+        bssid_out
     );
 }
 
@@ -21,6 +34,14 @@ void WifiConnectionManager_SaveCredentials(const char* ssid, const char* passwor
     WifiConnectionManager::GetInstance().SaveCredentials(
         std::string(ssid), 
         std::string(password)
+    );  // 使用默认空 BSSID
+}
+
+void WifiConnectionManager_SaveCredentialsWithBssid(const char* ssid, const char* password, const char* bssid) {
+    WifiConnectionManager::GetInstance().SaveCredentials(
+        std::string(ssid), 
+        std::string(password),
+        std::string(bssid ? bssid : "")
     );
 }
 
