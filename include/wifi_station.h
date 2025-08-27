@@ -21,6 +21,7 @@ class WifiStation {
 public:
     static WifiStation& GetInstance();
     void AddAuth(const std::string &&ssid, const std::string &&password);
+    void ClearAuth();
     void Start();
     void Stop();
     bool IsConnected();
