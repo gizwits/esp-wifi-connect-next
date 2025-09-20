@@ -103,6 +103,11 @@ void WifiStation::OnConnected(std::function<void(const std::string& ssid)> on_co
     on_connected_ = on_connected;
 }
 
+
+void WifiStation::OnScanResults(std::function<void(const std::vector<std::string>& ssids)> on_scan_results) {
+    on_scan_results_ = on_scan_results;
+}
+
 void WifiStation::Start() {
     // 检查是否已经启动
     if (timer_handle_ != nullptr) {
@@ -194,9 +199,14 @@ void WifiStation::HandleScanResult() {
 
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
+
+    std::vector<std::string> all_ssids;
+
     for (int i = 0; i < ap_num; i++) {
         auto ap_record = ap_records[i];
-        
+
+        all_ssids.push_back((char *)ap_record.ssid);
+
         // 将 BSSID 转换为字符串格式以便比较
         char bssid_str[18];
         sprintf(bssid_str, "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -235,6 +245,14 @@ void WifiStation::HandleScanResult() {
             connect_queue_.push_back(record);
         }
     }
+
+
+    // 扫描回调：返回 SSID 列表
+    if (on_scan_results_ && !all_ssids.empty()) {
+        
+        on_scan_results_(all_ssids);
+    }
+    
     free(ap_records);
 
     if (connect_queue_.empty()) {

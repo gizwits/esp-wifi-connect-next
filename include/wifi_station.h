@@ -39,6 +39,7 @@ public:
     void OnConnect(std::function<void(const std::string& ssid)> on_connect);
     void OnConnected(std::function<void(const std::string& ssid)> on_connected);
     void OnScanBegin(std::function<void()> on_scan_begin);
+    void OnScanResults(std::function<void(const std::vector<std::string>& ssids)> on_scan_results);
 
 private:
     WifiStation();
@@ -60,6 +61,7 @@ private:
     std::function<void(const std::string& ssid)> on_connect_;
     std::function<void(const std::string& ssid)> on_connected_;
     std::function<void()> on_scan_begin_;
+    std::function<void(const std::vector<std::string>& ssids)> on_scan_results_;
     std::vector<WifiApRecord> connect_queue_;
 
     void HandleScanResult();
