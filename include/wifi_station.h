@@ -33,8 +33,11 @@ public:
     void SetPowerSaveMode(bool enabled);
 
     
-    // 临时连接指定WiFi
+    // 临时连接指定WiFi（不保存到NVS）
     bool ConnectToWifi(const std::string& ssid, const std::string& password);
+    
+    // 临时连接指定WiFi并等待连接结果
+    bool ConnectToWifiAndWait(const std::string& ssid, const std::string& password, int timeout_ms = 10000);
 
     void OnConnect(std::function<void(const std::string& ssid)> on_connect);
     void OnConnected(std::function<void(const std::string& ssid)> on_connected);

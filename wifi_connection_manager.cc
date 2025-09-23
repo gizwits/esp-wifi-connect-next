@@ -625,9 +625,10 @@ void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_b
         ESP_LOGE(TAG, "WiFi disconnect reason: %s (code: %d)", reason_str, disconnected_data->reason);
         xEventGroupSetBits(self->event_group_, WIFI_FAIL_BIT);
     } else if (event_id == WIFI_EVENT_SCAN_DONE) {
-        // 新增：保存扫描到的所有 SSID，按 rssi 降序排序
+        // 新增：保存扫描到的所有 SSID，按 rssi 降序排序，并回调上层
         uint16_t ap_num = 0;
         std::vector<SsidRssiItem> scan_ssid_rssi_list;
+        std::vector<std::string> ssid_list;
         if (esp_wifi_scan_get_ap_num(&ap_num) == ESP_OK && ap_num > 0) {
             std::vector<wifi_ap_record_t> ap_records(ap_num);
             if (esp_wifi_scan_get_ap_records(&ap_num, ap_records.data()) == ESP_OK) {
@@ -640,11 +641,17 @@ void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_b
                 for (int i = 0; i < count; ++i) {
                     std::string ssid(reinterpret_cast<char*>(ap_records[i].ssid));
                     scan_ssid_rssi_list.emplace_back(ssid, ap_records[i].rssi);
+                    ssid_list.emplace_back(ssid);
                 }
             }
         }
         // 保存带RSSI的扫描结果
         SsidManager::GetInstance().ScanSsidRssiList(scan_ssid_rssi_list);
+        // 回调仅包含 SSID 列表，供上层快速判断
+        if (self->on_scan_results_) {
+            self->on_scan_results_(ssid_list);
+        }
+        
     }
 }
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include <functional>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <esp_wifi.h>
@@ -36,6 +38,8 @@ public:
     void SaveUid(const std::string& uid);
     bool IsConnected() const;
     void SaveCredentials(const std::string& ssid, const std::string& password, const std::string& bssid = "");
+    // 扫描结果回调：返回扫描到的 SSID 列表（按 RSSI 降序，最多30个）
+    void OnScanResults(std::function<void(const std::vector<std::string>& ssids)> cb) { on_scan_results_ = std::move(cb); }
 
 private:
     WifiConnectionManager();
@@ -66,5 +70,6 @@ private:
     int current_retry_count_;
     
     static const char* TAG;
+    std::function<void(const std::vector<std::string>& ssids)> on_scan_results_;
     
 }; 

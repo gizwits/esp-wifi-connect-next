@@ -311,6 +311,76 @@ void WifiStation::SetPowerSaveMode(bool enabled) {
     ESP_ERROR_CHECK(esp_wifi_set_ps(enabled ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE));
 }
 
+bool WifiStation::ConnectToWifi(const std::string& ssid, const std::string& password) {
+    ESP_LOGI(TAG, "Attempting temporary connection to WiFi: %s", ssid.c_str());
+    
+    // 检查是否已经启动
+    if (timer_handle_ == nullptr) {
+        ESP_LOGE(TAG, "WifiStation not started, call Start() first");
+        return false;
+    }
+    
+    // 清除连接状态
+    xEventGroupClearBits(event_group_, WIFI_EVENT_CONNECTED);
+    connect_queue_.clear();
+    reconnect_count_ = 0;
+    
+    // 若正在扫描，先停止扫描，避免与连接流程冲突（STA is connecting, scan are not allowed）
+    esp_err_t stop_scan_ret = esp_wifi_scan_stop();
+    if (stop_scan_ret != ESP_OK && stop_scan_ret != ESP_ERR_WIFI_STATE) {
+        // ESP_ERR_WIFI_STATE 表示当前未在扫描，属于可忽略状态
+        ESP_LOGW(TAG, "Failed to stop wifi scan before connect: %s", esp_err_to_name(stop_scan_ret));
+    }
+
+    // 设置临时连接参数
+    ssid_ = ssid;
+    password_ = password;
+    
+    if (on_connect_) {
+        on_connect_(ssid_);
+    }
+    
+    // 配置 WiFi 连接参数
+    wifi_config_t wifi_config;
+    bzero(&wifi_config, sizeof(wifi_config));
+    strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
+    strcpy((char *)wifi_config.sta.password, password.c_str());
+    
+    // 不设置 BSSID，让系统自动选择最佳信号
+    wifi_config.sta.bssid_set = false;
+    
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    
+    // 开始连接
+    esp_err_t ret = esp_wifi_connect();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start WiFi connection: %s", esp_err_to_name(ret));
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "WiFi connection started for: %s", ssid.c_str());
+    return true;
+}
+
+bool WifiStation::ConnectToWifiAndWait(const std::string& ssid, const std::string& password, int timeout_ms) {
+    ESP_LOGI(TAG, "Attempting temporary connection to WiFi: %s (with timeout: %d ms)", ssid.c_str(), timeout_ms);
+    
+    // 先尝试连接
+    if (!ConnectToWifi(ssid, password)) {
+        return false;
+    }
+    
+    // 等待连接结果
+    bool connected = WaitForConnected(timeout_ms);
+    if (connected) {
+        ESP_LOGI(TAG, "Successfully connected to WiFi: %s", ssid.c_str());
+    } else {
+        ESP_LOGW(TAG, "Failed to connect to WiFi: %s (timeout: %d ms)", ssid.c_str(), timeout_ms);
+    }
+    
+    return connected;
+}
+
 // Static event handler functions
 void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     auto* this_ = static_cast<WifiStation*>(arg);
