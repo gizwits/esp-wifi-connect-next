@@ -27,7 +27,11 @@ esp_err_t WifiConnectionManager::InitializeWiFi() {
         esp_wifi_deinit();
         return ret;
     }
-    return esp_wifi_start();
+    ret = esp_wifi_start();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    return ESP_OK;
 }
 
 WifiConnectionManager::WifiConnectionManager() 
@@ -46,7 +50,6 @@ WifiConnectionManager::WifiConnectionManager()
                                                       &WifiConnectionManager::IpEventHandler,
                                                       this,
                                                       &instance_got_ip_));
-    StartScanTimer();
 }
 
 WifiConnectionManager::~WifiConnectionManager() {
@@ -407,7 +410,15 @@ void WifiConnectionManager::SaveCredentials(const std::string& ssid, const std::
 
 void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     WifiConnectionManager* self = static_cast<WifiConnectionManager*>(arg);
-    if (event_id == WIFI_EVENT_STA_CONNECTED) {
+    if (event_id == WIFI_EVENT_STA_START) {
+        wifi_scan_config_t scan_config = {
+            .ssid = NULL,
+            .bssid = NULL,
+            .channel = 0,
+            .show_hidden = false,
+        };
+        esp_wifi_scan_start(&scan_config, false);
+    } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
         xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
         // 获取断开连接的具体原因
