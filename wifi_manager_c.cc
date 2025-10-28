@@ -11,11 +11,19 @@ esp_err_t WifiConnectionManager_Connect(const char* ssid, const char* password) 
     WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
         "Attempting to connect to WiFi: " + std::string(ssid));
     
-    return WifiConnectionManager::GetInstance().Connect(
+    esp_err_t result = WifiConnectionManager::GetInstance().Connect(
         std::string(ssid), 
         std::string(password),
         nullptr  // 不需要返回 BSSID
     );
+    
+    if (result != ESP_OK) {
+        // Notify that configuration failed
+        WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_FAILED, 
+            "Failed to connect to WiFi: " + std::string(ssid));
+    }
+    
+    return result;
 }
 
 esp_err_t WifiConnectionManager_ConnectWithBssid(const char* ssid, const char* password, char* bssid_out) {
@@ -23,11 +31,19 @@ esp_err_t WifiConnectionManager_ConnectWithBssid(const char* ssid, const char* p
     WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_PACKET_RECEIVED, 
         "Attempting to connect to WiFi: " + std::string(ssid));
     
-    return WifiConnectionManager::GetInstance().Connect(
+    esp_err_t result = WifiConnectionManager::GetInstance().Connect(
         std::string(ssid), 
         std::string(password),
         bssid_out
     );
+    
+    if (result != ESP_OK) {
+        // Notify that configuration failed
+        WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_FAILED, 
+            "Failed to connect to WiFi: " + std::string(ssid));
+    }
+    
+    return result;
 }
 
 void WifiConnectionManager_SaveCredentials(const char* ssid, const char* password) {

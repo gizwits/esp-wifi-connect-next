@@ -37,7 +37,8 @@ esp_err_t WifiConnectionManager::InitializeWiFi() {
 WifiConnectionManager::WifiConnectionManager() 
     : event_group_(xEventGroupCreate())
     , is_connecting_(false)
-    , scan_timer_(nullptr) {
+    , scan_timer_(nullptr)
+    , first_scan_done_(false) {
     
     // Register event handlers
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
@@ -78,7 +79,11 @@ void WifiConnectionManager::StartScanTimer() {
         .skip_unhandled_events = true
     };
     ESP_ERROR_CHECK(esp_timer_create(&timer_args, &scan_timer_));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(scan_timer_, 5 * 1000000)); // 5秒周期
+    
+    // 根据是否已完成首次扫描来设置不同的扫描周期
+    uint64_t scan_period = first_scan_done_ ? (10 * 1000000) : (5 * 1000000);  // 首次2秒，后续10秒
+    ESP_ERROR_CHECK(esp_timer_start_periodic(scan_timer_, scan_period));
+    ESP_LOGI(TAG, "Start scan timer with period: %llu seconds", scan_period / 1000000);
 
     esp_wifi_scan_start(nullptr, false);
 }
@@ -661,6 +666,18 @@ void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_b
         // 回调仅包含 SSID 列表，供上层快速判断
         if (self->on_scan_results_) {
             self->on_scan_results_(ssid_list);
+        }
+        
+        // 如果是首次扫描完成，调整扫描周期
+        if (!self->first_scan_done_ && !ssid_list.empty()) {
+            self->first_scan_done_ = true;
+            ESP_LOGI(TAG, "First scan completed with %zu SSIDs, adjusting scan period to 10 seconds", ssid_list.size());
+            
+            // 重新配置定时器周期为10秒
+            if (self->scan_timer_) {
+                esp_timer_stop(self->scan_timer_);
+                ESP_ERROR_CHECK(esp_timer_start_periodic(self->scan_timer_, 10 * 1000000));  // 10秒
+            }
         }
         
     }

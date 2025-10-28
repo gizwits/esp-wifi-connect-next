@@ -330,6 +330,9 @@ void WifiConfigurationAp::UdpServerTask(void* arg)
                 esp_restart();
             } else {
                 ESP_LOGE(TAG, "Failed to connect to WiFi");
+                // Notify that configuration failed
+                WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_FAILED, 
+                    "Failed to connect to WiFi: " + config.ssid);
             }
 
             // 重置连接标志

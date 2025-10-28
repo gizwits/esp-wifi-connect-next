@@ -57,6 +57,7 @@ private:
     esp_event_handler_instance_t instance_any_id_;
     esp_event_handler_instance_t instance_got_ip_;
     esp_timer_handle_t scan_timer_ = nullptr;
+    bool first_scan_done_ = false;  // 标记是否已完成首次扫描
     
     // 错误统计相关
     struct {

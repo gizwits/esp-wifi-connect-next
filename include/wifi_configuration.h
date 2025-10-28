@@ -13,6 +13,7 @@
 // Event types for WiFi configuration
 enum class WifiConfigEvent {
     CONFIG_PACKET_RECEIVED,    // When configuration packet is received
+    CONFIG_FAILED,             // When configuration fails
 };
 
 // Callback function type for WiFi configuration events
