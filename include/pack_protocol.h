@@ -55,7 +55,7 @@ size_t pack_wifi_config_state_notification(uint8_t frame_seq, uint8_t msg_id, ui
                                           const char* log_content, uint8_t log_len,
                                           uint8_t *out_buf, size_t buf_size);
 
-#define BLE_FRAME_MAX_PAYLOAD 248
+#define BLE_FRAME_MAX_PAYLOAD 251
 #define BLE_HEADER_LEN 4
 
 typedef void (*ble_frame_send_cb)(const uint8_t* frame, size_t frame_len, void* user_data);
