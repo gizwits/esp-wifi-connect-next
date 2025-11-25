@@ -416,13 +416,8 @@ void WifiConnectionManager::SaveCredentials(const std::string& ssid, const std::
 void WifiConnectionManager::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     WifiConnectionManager* self = static_cast<WifiConnectionManager*>(arg);
     if (event_id == WIFI_EVENT_STA_START) {
-        wifi_scan_config_t scan_config = {
-            .ssid = NULL,
-            .bssid = NULL,
-            .channel = 0,
-            .show_hidden = false,
-        };
-        esp_wifi_scan_start(&scan_config, false);
+        // 启动周期性扫描定时器（首次扫描周期5秒，后续10秒）
+        self->StartScanTimer();
     } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
         xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
