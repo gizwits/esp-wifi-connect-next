@@ -19,6 +19,7 @@
  #include "ssid_manager_c.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "wifi_manager_c.h"
 #include "ble.h"
@@ -40,6 +41,9 @@
 
 /*** Maximum number of characteristics with the notify flag ***/
 #define MAX_NOTIFY 5
+
+/*** Maximum BLE write data length (to avoid stack overflow) ***/
+#define MAX_BLE_WRITE_DATA_LEN 512
 
 #define GATT_SVR_SVC_CUSTOM_UUID                    0xABD0
 #define GATT_SVR_CHR_CUSTOM_READ_UUID              0xABD4
@@ -64,6 +68,12 @@ typedef void (*ble_data_callback_t)(const uint8_t *data, size_t length);
 // 在文件开头添加函数声明
 static void print_received_data(const uint8_t *data, size_t len, bool is_no_response);
 
+// BLE 发送帧回调函数（用于 WiFi 列表响应）
+static void ble_send_frame_cb(const uint8_t* frame, size_t frame_len, void* user_data) {
+    ESP_LOGI(TAG, "ble_send_frame_cb");
+    ble_send_notify(frame, frame_len);
+}
+
 // 在文件开头添加外部声明
 extern void process_wifi_config(const char* ssid, const char* password, const char* uid);
 
@@ -71,105 +81,135 @@ extern void process_wifi_config(const char* ssid, const char* password, const ch
 typedef struct {
     char ssid[33];
     char password[65];
-    uint8_t msg_id;
-    uint16_t conn_handle;
-    uint16_t notify_handle;
+    char uid[64];
 } wifi_connect_params_t;
 
-// WiFi连接任务
-// static void wifi_connect_task(void *pvParameters)
-// {
+// WiFi连接任务（在独立任务中执行，避免在 BLE 任务中使用大量栈空间）
+static void wifi_connect_task(void *pvParameters) {
+    wifi_connect_params_t *params = (wifi_connect_params_t *)pvParameters;
+    
+    // 在独立任务中执行 WiFi 连接，避免栈溢出
+    char bssid[18];
+    uint8_t response[256];  // 足够大的缓冲区
+    char error_msg[128];
+    
+    // 使用 WiFi 连接管理器进行连接
+    esp_err_t ret = WifiConnectionManager_ConnectWithBssid(params->ssid, params->password, bssid);
+    if (ret == ESP_OK) {
+        // 连接成功，保存数据（包含 BSSID）
+        WifiConnectionManager_SaveCredentialsWithBssid(params->ssid, params->password, bssid);
+        if (params->uid[0] != '\0') {
+            WifiConnectionManager_SaveUid(params->uid);
+        }
+        
+        // 发送配网状态通知：正在进行设备注册
+        size_t resp_len = pack_wifi_config_state_notification(
+            0,  // frame_seq
+            MSG_ID_DATA_POINT,  // msg_id
+            EVENT_CLOUD_CONNECTED,  // status
+            "Device registration in progress",  // log_content
+            strlen("Device registration in progress"),  // log_len
+            response,
+            sizeof(response)
+        );
+        
+        if (resp_len > 0) {
+            // 发送状态通知
+            ble_send_notify(response, resp_len);
+            ESP_LOGI(TAG, "Sent EVENT_REGISTERING notification");
+        }
+        
+        // 重启
+        vTaskDelay(pdMS_TO_TICKS(500));
+        esp_restart();
+    } else {
+        // 连接失败
+        ESP_LOGE(TAG, "Failed to connect to WiFi, error: %s", esp_err_to_name(ret));
+        
+        // 检查是否为密码错误
+        const char* error_type = "WiFi connection failed";
+        if (ret == ESP_ERR_WIFI_PASSWORD_INCORRECT) {
+            error_type = "Incorrect WiFi password";
+            ESP_LOGE(TAG, "Password error detected: %s", esp_err_to_name(ret));
+        }
+        
+        // 发送配网状态通知：连接Wi-Fi失败
+        snprintf(error_msg, sizeof(error_msg), "%s", error_type);
+        
+        size_t resp_len = pack_wifi_config_state_notification(
+            0,  // frame_seq
+            MSG_ID_DATA_POINT,  // msg_id
+            EVENT_CONNECT_ROUTER_FAILED,  // status
+            error_msg,  // log_content
+            strlen(error_msg),  // log_len
+            response,
+            sizeof(response)
+        );
+        
+        if (resp_len > 0) {
+            ble_send_notify(response, resp_len);
+            ESP_LOGI(TAG, "Sent EVENT_CONNECT_ROUTER_FAILED notification");
+        }
 
-//     user_event_notify(USER_EVENT_WIFI_CONNECTING);
-//     is_connecting = 1;
-//     wifi_connect_params_t *params = (wifi_connect_params_t *)pvParameters;
+        // 主动断开连接
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+            ESP_LOGI(TAG, "Disconnecting BLE connection, handle: %d", conn_handle);
+            ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        }
+    }
     
-//     // 连接WiFi
-//     esp_err_t ret = wifi_connect_and_switch_to_sta(params->ssid, params->password);
+    // 释放参数内存
+    free(params);
     
-//     // 释放参数内存
-//     free(params);
-    
-//     // 删除自己
-//     vTaskDelete(NULL);
-// }
-
+    // 删除自己
+    vTaskDelete(NULL);
+}
 
 void process_wifi_config(const char* ssid, const char* password, const char* uid) {
     if (ssid && password) {
-        // 使用 WiFi 连接管理器进行连接
-        char bssid[18];
-        esp_err_t ret = WifiConnectionManager_ConnectWithBssid(ssid, password, bssid);
-        if (ret == ESP_OK) {
-            // 连接成功，保存数据（包含 BSSID）
-            WifiConnectionManager_SaveCredentialsWithBssid(ssid, password, bssid);
-            if (uid) {
-                WifiConnectionManager_SaveUid(uid);
-            }
+        // 分配参数结构体
+        wifi_connect_params_t *params = (wifi_connect_params_t *)malloc(sizeof(wifi_connect_params_t));
+        if (params == NULL) {
+            ESP_LOGE(TAG, "Failed to allocate memory for WiFi connect params");
             
-            // 发送配网状态通知：正在进行设备注册
-            uint8_t response[256];  // 足够大的缓冲区
+            // 发送配网状态通知：内存分配失败
+            static uint8_t response[256];
             size_t resp_len = pack_wifi_config_state_notification(
                 0,  // frame_seq
                 MSG_ID_DATA_POINT,  // msg_id
-                EVENT_CLOUD_CONNECTED,  // status
-                "Device registration in progress",  // log_content
-                strlen("Device registration in progress"),  // log_len
-                response,
-                sizeof(response)
-            );
-            
-            if (resp_len > 0) {
-                // 发送状态通知
-                ble_send_notify(response, resp_len);
-                ESP_LOGI(TAG, "Sent EVENT_REGISTERING notification");
-            }
-            
-            // 重启
-            vTaskDelay(pdMS_TO_TICKS(500));
-            esp_restart();
-        } else {
-            // 连接失败
-            ESP_LOGE(TAG, "Failed to connect to WiFi, error: %s", esp_err_to_name(ret));
-            
-            // 检查是否为密码错误
-            const char* error_type = "WiFi connection failed";
-            if (ret == ESP_ERR_WIFI_PASSWORD_INCORRECT) {
-                error_type = "Incorrect WiFi password";
-                ESP_LOGE(TAG, "Password error detected: %s", esp_err_to_name(ret));
-            }
-            
-            // 发送配网状态通知：连接Wi-Fi失败
-            char error_msg[128];
-            snprintf(error_msg, sizeof(error_msg), "%s", error_type);
-            
-            uint8_t response[256];
-            size_t resp_len = pack_wifi_config_state_notification(
-                0,  // frame_seq
-                MSG_ID_DATA_POINT,  // msg_id
-                EVENT_CONNECT_ROUTER_FAILED,  // status
-                error_msg,  // log_content
-                strlen(error_msg),  // log_len
+                EVENT_INVALID_ONBOARDING_PKG,  // status
+                "Memory allocation failed",  // log_content
+                strlen("Memory allocation failed"),  // log_len
                 response,
                 sizeof(response)
             );
             
             if (resp_len > 0) {
                 ble_send_notify(response, resp_len);
-                ESP_LOGI(TAG, "Sent EVENT_CONNECT_ROUTER_FAILED notification");
             }
-
-            // 主动断开连接
-            if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
-                ESP_LOGI(TAG, "Disconnecting BLE connection, handle: %d", conn_handle);
-                ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
-            }
+            return;
         }
+        
+        // 复制参数
+        strncpy(params->ssid, ssid, sizeof(params->ssid) - 1);
+        params->ssid[sizeof(params->ssid) - 1] = '\0';
+        strncpy(params->password, password, sizeof(params->password) - 1);
+        params->password[sizeof(params->password) - 1] = '\0';
+        if (uid) {
+            strncpy(params->uid, uid, sizeof(params->uid) - 1);
+            params->uid[sizeof(params->uid) - 1] = '\0';
+        } else {
+            params->uid[0] = '\0';
+        }
+        
+        // 创建独立任务来处理 WiFi 连接（使用较大的栈空间）
+        xTaskCreate(wifi_connect_task, "wifi_connect", 4096, params, 5, NULL);
+        ESP_LOGI(TAG, "Created WiFi connect task");
     } else {
         ESP_LOGE(TAG, "Invalid WiFi config parameters");
         
         // 发送配网状态通知：解析配置包失败
-        uint8_t response[256];
+        static uint8_t response[256];
         size_t resp_len = pack_wifi_config_state_notification(
             0,  // frame_seq
             MSG_ID_DATA_POINT,  // msg_id
@@ -208,7 +248,12 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
     case GATT_SVR_CHR_CUSTOM_WRITE_UUID:
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
             uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
-            uint8_t data[len];
+            // 使用静态数组避免栈溢出（变长数组可能导致栈溢出）
+            static uint8_t data[MAX_BLE_WRITE_DATA_LEN];
+            if (len > MAX_BLE_WRITE_DATA_LEN) {
+                ESP_LOGE(TAG, "Data length %d exceeds maximum %d", len, MAX_BLE_WRITE_DATA_LEN);
+                return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+            }
             rc = ble_hs_mbuf_to_flat(ctxt->om, data, len, NULL);
             if (rc == 0) {
                 protocol_data_t result = protocol_parse_data(data, len);
@@ -220,13 +265,9 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                             ESP_LOGI(TAG, "CMD_GET_WIFI_LIST");
                             // 使用新的带RSSI的函数
                             const char* ssid_list_json = ssid_manager_get_scan_ssid_rssi_list_json();
-                            ESP_LOGI(TAG, "ssid_list_json with RSSI: %s", ssid_list_json);
+                            // ESP_LOGI(TAG, "ssid_list_json with RSSI: %s", ssid_list_json);
                             size_t json_len = strlen(ssid_list_json);
-                            // BLE 分包发送
-                            void ble_send_frame_cb(const uint8_t* frame, size_t frame_len, void* user_data) {
-                                ESP_LOGI(TAG, "ble_send_frame_cb");
-                                ble_send_notify(frame, frame_len);
-                            }
+                            // BLE 分包发送（使用文件作用域的静态函数，避免栈溢出）
                             pack_and_send_wifi_list_response(
                                 result.msg_id,
                                 CMD_WIFI_LIST_RESP,
@@ -263,6 +304,12 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                                 ble_send_notify(response, resp_len);
                                 ESP_LOGI(TAG,"WiFi config response sent");
 
+                                // 如果解析出 domain，保存到 server_url
+                                if (wifi_config.domain_len > 0 && wifi_config.domain[0] != '\0') {
+                                    ESP_LOGI(TAG, "Saving domain as server_url: %s", wifi_config.domain);
+                                    WifiConnectionManager_SaveServerUrl(wifi_config.domain);
+                                }
+
                                 // 调用回调函数处理WiFi配置
                                 process_wifi_config(wifi_config.ssid, wifi_config.password, wifi_config.uid);
                             }
@@ -286,10 +333,15 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
     case GATT_SVR_CHR_CUSTOM_WRITE_NR_UUID:
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
             uint16_t len = OS_MBUF_PKTLEN(ctxt->om);
-            uint8_t data[len];
-            rc = ble_hs_mbuf_to_flat(ctxt->om, data, len, NULL);
+            // 使用静态数组避免栈溢出（变长数组可能导致栈溢出）
+            static uint8_t data_nr[MAX_BLE_WRITE_DATA_LEN];
+            if (len > MAX_BLE_WRITE_DATA_LEN) {
+                ESP_LOGE(TAG, "Data length %d exceeds maximum %d", len, MAX_BLE_WRITE_DATA_LEN);
+                return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+            }
+            rc = ble_hs_mbuf_to_flat(ctxt->om, data_nr, len, NULL);
             if (rc == 0) {
-                print_received_data(data, len, true);
+                print_received_data(data_nr, len, true);
             }
             return 0;
         }

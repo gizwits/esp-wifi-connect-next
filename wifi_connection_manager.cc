@@ -6,7 +6,7 @@
 #include "wifi_manager_c.h"
 #include <algorithm> // Added for std::sort
 #define NVS_NAMESPACE "wifi"
-#define MAX_WIFI_SCAN_SSID_COUNT 30
+#define MAX_WIFI_SCAN_SSID_COUNT 20
 
 const char* WifiConnectionManager::TAG = "WifiConnectionManager";
 
@@ -696,6 +696,22 @@ void WifiConnectionManager::SaveUid(const std::string& uid) {
         nvs_close(nvs_handle);
         
         ESP_LOGI(TAG, "Saved uid: %s and set need_activation flag", uid.c_str());
+    }
+}
+
+void WifiConnectionManager::SaveServerUrl(const std::string& server_url) {
+    // 如果 server_url 有效，保存到 NVS
+    if (!server_url.empty()) {
+        nvs_handle_t nvs_handle;
+        ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
+        
+        // 保存 server_url
+        ESP_ERROR_CHECK(nvs_set_str(nvs_handle, "server_url", server_url.c_str()));
+        
+        ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+        nvs_close(nvs_handle);
+        
+        ESP_LOGI(TAG, "Saved server_url: %s", server_url.c_str());
     }
 }
 

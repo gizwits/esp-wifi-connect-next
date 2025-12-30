@@ -47,6 +47,12 @@ void WifiConnectionManager_SaveCredentialsWithBssid(const char* ssid, const char
  */
 void WifiConnectionManager_SaveUid(const char* uid);
 
+/**
+ * @brief 保存服务器URL
+ * @param server_url 服务器URL（可以是完整域名、IP:端口等格式）
+ */
+void WifiConnectionManager_SaveServerUrl(const char* server_url);
+
 #ifdef __cplusplus
 }
 #endif

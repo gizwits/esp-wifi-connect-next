@@ -136,11 +136,11 @@ void pack_and_send_wifi_list_response(
     uint8_t total_frames = (payload_len + BLE_FRAME_MAX_PAYLOAD - 1) / BLE_FRAME_MAX_PAYLOAD;
     if (total_frames == 0) total_frames = 1;
     ESP_LOGI(TAG, "total_frames: %d, payload_len: %d", total_frames, payload_len);
+    // 使用静态数组避免栈溢出（255字节的栈数组可能导致栈溢出）
+    static uint8_t frame[BLE_HEADER_LEN + BLE_FRAME_MAX_PAYLOAD];
     for (uint8_t seq = 0; seq < total_frames; ++seq) {
         size_t offset = seq * BLE_FRAME_MAX_PAYLOAD;
         size_t this_len = (payload_len - offset > BLE_FRAME_MAX_PAYLOAD) ? BLE_FRAME_MAX_PAYLOAD : (payload_len - offset);
-
-        uint8_t frame[BLE_HEADER_LEN + BLE_FRAME_MAX_PAYLOAD];
         // Header
         frame[0] = ((msg_id & 0x1F) | ((ver & 0x03) << 5) | ((reserved & 0x01) << 7));
         frame[1] = cmd;
@@ -182,8 +182,8 @@ void send_wifi_config_state_notification(uint8_t frame_seq, uint8_t status,
         }
     }
 
-    // 分配缓冲区
-    uint8_t buffer[BLE_FRAME_MAX_PAYLOAD];
+    // 使用静态数组避免栈溢出
+    static uint8_t buffer[BLE_FRAME_MAX_PAYLOAD];
     size_t pack_len = pack_wifi_config_state_notification(
         frame_seq, MSG_ID_DATA_POINT, status, log_content, log_len, buffer, sizeof(buffer)
     );
