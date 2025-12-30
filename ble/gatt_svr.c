@@ -235,9 +235,16 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                             );
                             break;
                         }
-                        case CMD_WIFI_CONFIG:
-                            // 使用解析后的WiFi配置数据
-                            wifi_config_t *wifi_config = &result.data.wifi_config;
+                        case CMD_WIFI_CONFIG: {
+                            // 二次解析：解析WiFi配置数据
+                            wifi_config_t wifi_config;
+                            bool parse_success = parse_wifi_config(data, len, &wifi_config);
+                            
+                            if (!parse_success) {
+                                ESP_LOGE(TAG, "Failed to parse WiFi config data");
+                                // 可以发送错误响应
+                                break;
+                            }
                             
                             // 构建响应包
                             uint8_t response[21];  // sizeof(wifi_config_response_t)
@@ -257,9 +264,10 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                                 ESP_LOGI(TAG,"WiFi config response sent");
 
                                 // 调用回调函数处理WiFi配置
-                                process_wifi_config(wifi_config->ssid, wifi_config->password, wifi_config->uid);
+                                process_wifi_config(wifi_config.ssid, wifi_config.password, wifi_config.uid);
                             }
                             break;
+                        }
                     }
                 }
             }

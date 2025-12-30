@@ -25,6 +25,13 @@ typedef struct {
     uint8_t password_len;   // 密码长度
     char uid[33];           // UID (最大32字节 + 1字节结束符)
     uint8_t uid_len;        // UID长度
+    // 新协议格式的附加字段
+    char domain[4];         // 域名代码 ("0", "1", "2" 等)
+    uint8_t domain_len;     // 域名长度
+    char timezone_h;        // 时区小时 (0-9, A-F, a-o)
+    char timezone_m;        // 时区分钟精度 (0-3)
+    char timezone_code[8];  // 时区代码
+    uint8_t timezone_code_len; // 时区代码长度
 } wifi_config_t;
 
 // 协议解析结果结构体
@@ -56,5 +63,8 @@ typedef struct {
 
 // 函数声明
 protocol_data_t protocol_parse_data(const uint8_t *data, size_t len);
+
+// WiFi配置解析函数（用于二次解析）
+bool parse_wifi_config(const uint8_t *data, size_t len, wifi_config_t *wifi_config);
 
 #endif // _PROTOCOL_H_ 
