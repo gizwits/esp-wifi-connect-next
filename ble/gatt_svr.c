@@ -310,8 +310,16 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                                     WifiConnectionManager_SaveServerUrl(wifi_config.domain);
                                 }
 
-                                // 调用回调函数处理WiFi配置
-                                process_wifi_config(wifi_config.ssid, wifi_config.password, wifi_config.uid);
+                                char uid_str[33];  // 32 字符 + 1 个结束符
+                                if (wifi_config.uid_len > 0 && wifi_config.uid_len <= 32) {
+                                    memcpy(uid_str, wifi_config.uid, wifi_config.uid_len);
+                                    uid_str[wifi_config.uid_len] = '\0';  // 确保以 null 结尾
+                                    process_wifi_config(wifi_config.ssid, wifi_config.password, uid_str);
+                                } else {
+                                    // 如果没有 UID 或 UID 长度无效，传递 NULL
+                                    process_wifi_config(wifi_config.ssid, wifi_config.password, NULL);
+                                }
+
                             }
                             break;
                         }
