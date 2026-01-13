@@ -1,21 +1,43 @@
 #include "wifi_configuration.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char* TAG = "WifiConfiguration";
 
-// 定时器回调函数，用于延时启动蓝牙
-static void ble_delayed_init_callback(void* arg) {
-    std::string* product_key = static_cast<std::string*>(arg);
-    ESP_LOGI(TAG, "Starting delayed BLE initialization...");
-    
 #if defined(CONFIG_BT_NIMBLE_ENABLED)
+// BLE 初始化任务函数
+static void ble_init_task(void* arg) {
+    std::string* product_key = static_cast<std::string*>(arg);
+    ESP_LOGI(TAG, "Starting BLE initialization in dedicated task...");
+
     auto& ble_config = WifiConfigurationBle::getInstance();
     ble_config.init(*product_key);
-#endif
-    
+
     // 清理内存
     delete product_key;
+    vTaskDelete(NULL);
+}
+#endif
+
+// 定时器回调函数，用于延时启动蓝牙
+static void ble_delayed_init_callback(void* arg) {
+#if defined(CONFIG_BT_NIMBLE_ENABLED)
+    ESP_LOGI(TAG, "Timer fired, creating BLE init task...");
+    // 在独立任务中初始化 BLE，避免 timer 回调堆栈溢出
+    xTaskCreate(
+        ble_init_task,
+        "ble_init",
+        4096,
+        arg,
+        5,
+        NULL
+    );
+#else
+    std::string* product_key = static_cast<std::string*>(arg);
+    delete product_key;
+#endif
 }
 
 WifiConfiguration& WifiConfiguration::GetInstance() {
