@@ -156,17 +156,27 @@ static void wifi_connect_task(void *pvParameters) {
             ESP_LOGI(TAG, "Disconnecting BLE connection, handle: %d", conn_handle);
             ble_gap_terminate(conn_handle, BLE_ERR_REM_USER_CONN_TERM);
         }
+
+        // 连接失败，重置标志以允许再次尝试
+        is_connecting = 0;
     }
-    
+
     // 释放参数内存
     free(params);
-    
+
     // 删除自己
     vTaskDelete(NULL);
 }
 
 void process_wifi_config(const char* ssid, const char* password, const char* uid) {
+    // 防止重复处理配网请求
+    if (is_connecting) {
+        ESP_LOGW(TAG, "WiFi connection already in progress, ignoring duplicate config request");
+        return;
+    }
+
     if (ssid && password) {
+        is_connecting = 1;  // 标记正在连接
         // 分配参数结构体
         wifi_connect_params_t *params = (wifi_connect_params_t *)malloc(sizeof(wifi_connect_params_t));
         if (params == NULL) {
