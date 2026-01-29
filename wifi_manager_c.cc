@@ -69,4 +69,8 @@ void WifiConnectionManager_SaveServerUrl(const char* server_url) {
     WifiConnectionManager::GetInstance().SaveServerUrl(std::string(server_url ? server_url : ""));
 }
 
+void WifiConnectionManager_SaveTraceId(const char* trace_id) {
+    WifiConnectionManager::GetInstance().SaveTraceId(std::string(trace_id ? trace_id : ""));
+}
+
 } // extern "C" 

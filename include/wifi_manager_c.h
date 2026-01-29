@@ -53,6 +53,12 @@ void WifiConnectionManager_SaveUid(const char* uid);
  */
 void WifiConnectionManager_SaveServerUrl(const char* server_url);
 
+/**
+ * @brief 保存链路追踪ID
+ * @param trace_id 链路追踪ID（32字符十六进制字符串）
+ */
+void WifiConnectionManager_SaveTraceId(const char* trace_id);
+
 #ifdef __cplusplus
 }
 #endif

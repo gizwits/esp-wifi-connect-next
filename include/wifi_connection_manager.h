@@ -37,6 +37,7 @@ public:
     void Disconnect();
     void SaveUid(const std::string& uid);
     void SaveServerUrl(const std::string& server_url);
+    void SaveTraceId(const std::string& trace_id);
     bool IsConnected() const;
     void SaveCredentials(const std::string& ssid, const std::string& password, const std::string& bssid = "");
     // 扫描结果回调：返回扫描到的 SSID 列表（按 RSSI 降序，最多30个）

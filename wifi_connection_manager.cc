@@ -704,14 +704,30 @@ void WifiConnectionManager::SaveServerUrl(const std::string& server_url) {
     if (!server_url.empty()) {
         nvs_handle_t nvs_handle;
         ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
-        
+
         // 保存 server_url
         ESP_ERROR_CHECK(nvs_set_str(nvs_handle, "server_url", server_url.c_str()));
-        
+
         ESP_ERROR_CHECK(nvs_commit(nvs_handle));
         nvs_close(nvs_handle);
-        
+
         ESP_LOGI(TAG, "Saved server_url: %s", server_url.c_str());
+    }
+}
+
+void WifiConnectionManager::SaveTraceId(const std::string& trace_id) {
+    // 如果 trace_id 有效，保存到 NVS
+    if (!trace_id.empty()) {
+        nvs_handle_t nvs_handle;
+        ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs_handle));
+
+        // 保存 trace_id
+        ESP_ERROR_CHECK(nvs_set_str(nvs_handle, "trace_id", trace_id.c_str()));
+
+        ESP_ERROR_CHECK(nvs_commit(nvs_handle));
+        nvs_close(nvs_handle);
+
+        ESP_LOGI(TAG, "Saved trace_id: %s", trace_id.c_str());
     }
 }
 

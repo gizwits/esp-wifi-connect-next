@@ -12,7 +12,8 @@
 
 // CMD 指令定义
 #define CMD_WIFI_CONFIG 0x40        // WiFi配置指令
-#define CMD_GET_WIFI_LIST 0x45        // WiFi配置指令
+#define CMD_TRACE_ID_SET 0x47       // 设置 TraceId 指令
+#define CMD_GET_WIFI_LIST 0x45      // 获取WiFi列表指令
 
 // WiFi配置结构体
 typedef struct {
@@ -34,14 +35,20 @@ typedef struct {
     uint8_t timezone_code_len; // 时区代码长度
 } wifi_config_t;
 
+// TraceId 配置结构体
+typedef struct {
+    char trace_id[33];      // TraceId (32字符十六进制 + 1字节结束符)
+    uint8_t trace_id_len;   // TraceId 长度
+} trace_id_config_t;
+
 // 协议解析结果结构体
 typedef struct {
     uint8_t cmd;           // 命令类型
     uint8_t msg_id;        // 消息ID
     bool success;          // 解析是否成功
     union {
-        wifi_config_t wifi_config;  // WiFi配置数据
-        // 可以在这里添加其他类型的数据结构
+        wifi_config_t wifi_config;      // WiFi配置数据
+        trace_id_config_t trace_id;     // TraceId配置数据
     } data;
 } protocol_data_t;
 
@@ -66,5 +73,8 @@ protocol_data_t protocol_parse_data(const uint8_t *data, size_t len);
 
 // WiFi配置解析函数（用于二次解析）
 bool parse_wifi_config(const uint8_t *data, size_t len, wifi_config_t *wifi_config);
+
+// TraceId解析函数
+bool parse_trace_id_config(const uint8_t *data, size_t len, trace_id_config_t *trace_id_config);
 
 #endif // _PROTOCOL_H_ 

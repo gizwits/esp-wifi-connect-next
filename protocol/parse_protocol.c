@@ -110,6 +110,25 @@ bool parse_wifi_config(const uint8_t *data, size_t len, wifi_config_t *wifi_conf
     size_t offset = 4;  // 跳过协议头
     bool is_old_format = false;
 
+    // 打印完整的原始数据（十六进制）
+    printf("Raw data (len=%zu):\n", len);
+    for (size_t i = 0; i < len; i++) {
+        printf("%02X ", data[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
+
+    // 打印可打印字符
+    printf("Raw data (ASCII):\n");
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] >= 0x20 && data[i] <= 0x7E) {
+            printf("%c", data[i]);
+        } else {
+            printf(".");
+        }
+    }
+    printf("\n\n");
+
     // 1. 解析NTP时间戳
     if (offset + 4 > len) {
         printf("Error: Not enough data for NTP timestamp\n");
@@ -299,6 +318,53 @@ bool parse_wifi_config(const uint8_t *data, size_t len, wifi_config_t *wifi_conf
             printf("  Timezone Code (%d): %s\n", wifi_config->timezone_code_len, wifi_config->timezone_code);
         }
     }
+
+    return true;
+}
+
+// 解析 TraceId 配置
+bool parse_trace_id_config(const uint8_t *data, size_t len, trace_id_config_t *trace_id_config) {
+    size_t offset = 4;  // 跳过协议头
+
+    // 打印原始数据
+    printf("TraceId Config Raw data (len=%zu):\n", len);
+    for (size_t i = 0; i < len; i++) {
+        printf("%02X ", data[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
+
+    // 初始化结构体
+    memset(trace_id_config, 0, sizeof(trace_id_config_t));
+
+    // 解析 trace_id 长度
+    if (offset >= len) {
+        printf("Error: Not enough data for trace_id length\n");
+        return false;
+    }
+
+    uint8_t trace_id_len = data[offset++];
+    printf("TraceId length: %d\n", trace_id_len);
+
+    // 验证长度
+    if (trace_id_len > 32) {
+        printf("Error: TraceId length exceeds maximum (32). Got: %d\n", trace_id_len);
+        return false;
+    }
+
+    // 检查是否有足够的数据
+    if (offset + trace_id_len > len) {
+        printf("Error: Not enough data for trace_id. Required: %d, Available: %zu\n",
+               trace_id_len, len - offset);
+        return false;
+    }
+
+    // 复制 trace_id
+    memcpy(trace_id_config->trace_id, &data[offset], trace_id_len);
+    trace_id_config->trace_id[trace_id_len] = '\0';  // 添加字符串结束符
+    trace_id_config->trace_id_len = trace_id_len;
+
+    printf("Parsed TraceId: %s (length: %d)\n", trace_id_config->trace_id, trace_id_config->trace_id_len);
 
     return true;
 }

@@ -286,6 +286,20 @@ gatt_svr_chr_access_custom_service(uint16_t conn_handle, uint16_t attr_handle,
                             );
                             break;
                         }
+                        case CMD_TRACE_ID_SET: {
+                            // 解析 TraceId 数据
+                            trace_id_config_t trace_id_config;
+                            bool parse_success = parse_trace_id_config(data, len, &trace_id_config);
+
+                            if (parse_success && trace_id_config.trace_id_len > 0) {
+                                // 保存 trace_id 到 NVS
+                                WifiConnectionManager_SaveTraceId(trace_id_config.trace_id);
+                                ESP_LOGI(TAG, "TraceId saved: %s", trace_id_config.trace_id);
+                            } else {
+                                ESP_LOGE(TAG, "Failed to parse TraceId config");
+                            }
+                            break;
+                        }
                         case CMD_WIFI_CONFIG: {
                             // 二次解析：解析WiFi配置数据
                             wifi_config_t wifi_config;
