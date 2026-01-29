@@ -19,7 +19,7 @@ typedef struct {
     uint32_t ntp;           // 时间戳
     char ssid[33];          // SSID (最大32字节 + 1字节结束符)
     uint8_t ssid_len;       // SSID长度
-    char bssid[7];          // BSSID (6字节 + 1字节结束符)
+    char bssid[18];         // BSSID (支持12字符十六进制字符串如"AABBCCDDEEFF"或17字符带冒号格式"AA:BB:CC:DD:EE:FF" + 1字节结束符)
     uint8_t bssid_len;      // BSSID长度
     char password[65];      // 密码 (最大64字节 + 1字节结束符)
     uint8_t password_len;   // 密码长度
