@@ -73,4 +73,13 @@ void WifiConnectionManager_SaveTraceId(const char* trace_id) {
     WifiConnectionManager::GetInstance().SaveTraceId(std::string(trace_id ? trace_id : ""));
 }
 
-} // extern "C" 
+void WifiConfiguration_NotifySuccess(const char* message) {
+    WifiConfiguration::GetInstance().NotifyEvent(
+        WifiConfigEvent::CONFIG_SUCCESS, std::string(message ? message : ""));
+}
+
+bool WifiConfiguration_ShouldRestartOnSuccess(void) {
+    return WifiConfiguration::GetInstance().ShouldRestartOnSuccess();
+}
+
+} // extern "C"

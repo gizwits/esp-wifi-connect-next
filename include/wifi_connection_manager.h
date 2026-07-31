@@ -32,6 +32,7 @@ public:
     static WifiConnectionManager& GetInstance();
 
     static esp_err_t InitializeWiFi();
+    void Shutdown();
 
     esp_err_t Connect(const std::string& ssid, const std::string& password, char* bssid_out = nullptr);
     void Disconnect();
@@ -53,11 +54,14 @@ private:
     void StopScanTimer();
     static void ScanTimerCallback(void* arg);
     static const char* GetDisconnectReasonString(wifi_err_reason_t reason);
+    esp_err_t RegisterEventHandlers();
+    void UnregisterEventHandlers();
 
     EventGroupHandle_t event_group_;
     bool is_connecting_;
     esp_event_handler_instance_t instance_any_id_;
     esp_event_handler_instance_t instance_got_ip_;
+    bool handlers_registered_;
     esp_timer_handle_t scan_timer_ = nullptr;
     bool first_scan_done_ = false;  // 标记是否已完成首次扫描
     

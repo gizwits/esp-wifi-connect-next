@@ -118,10 +118,12 @@ static void wifi_connect_task(void *pvParameters) {
             ble_send_notify(response, resp_len);
             ESP_LOGI(TAG, "Sent EVENT_REGISTERING notification");
         }
-        
-        // 重启
-        vTaskDelay(pdMS_TO_TICKS(500));
-        esp_restart();
+
+        WifiConfiguration_NotifySuccess(params->ssid);
+        if (WifiConfiguration_ShouldRestartOnSuccess()) {
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+        }
     } else {
         // 连接失败
         ESP_LOGE(TAG, "Failed to connect to WiFi, error: %s", esp_err_to_name(ret));

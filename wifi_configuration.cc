@@ -100,6 +100,18 @@ void WifiConfiguration::RegisterCallback(WifiConfigCallback callback) {
     }
 }
 
+void WifiConfiguration::ClearCallbacks() {
+    callbacks_.clear();
+}
+
+void WifiConfiguration::SetRestartOnSuccess(bool restart_on_success) {
+    restart_on_success_ = restart_on_success;
+}
+
+bool WifiConfiguration::ShouldRestartOnSuccess() const {
+    return restart_on_success_;
+}
+
 void WifiConfiguration::NotifyEvent(WifiConfigEvent event, const std::string& message) {
     for (const auto& callback : callbacks_) {
         if (callback) {

@@ -326,8 +326,13 @@ void WifiConfigurationAp::UdpServerTask(void* arg)
                     ESP_LOGI(TAG, "Response sent successfully");
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(500));
-                esp_restart();
+                auto& wifi_configuration = WifiConfiguration::GetInstance();
+                wifi_configuration.NotifyEvent(WifiConfigEvent::CONFIG_SUCCESS,
+                    "Connected to WiFi: " + config.ssid);
+                if (wifi_configuration.ShouldRestartOnSuccess()) {
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    esp_restart();
+                }
             } else {
                 ESP_LOGE(TAG, "Failed to connect to WiFi");
                 // Notify that configuration failed
@@ -624,8 +629,11 @@ void WifiConfigurationAp::StartWebServer()
                     wifi_manager.SaveUid(uid_str);
                 }
                 cJSON_Delete(json);
-                httpd_resp_send(req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
-                return ESP_OK;
+                esp_err_t response_result = httpd_resp_send(
+                    req, "{\"success\":true}", HTTPD_RESP_USE_STRLEN);
+                WifiConfiguration::GetInstance().NotifyEvent(
+                    WifiConfigEvent::CONFIG_SUCCESS, "Connected to WiFi: " + ssid_str);
+                return response_result;
             } else {
                 cJSON_Delete(json);
                 httpd_resp_send(req, "{\"success\":false,\"error\":\"无法连接到 WiFi\"}", HTTPD_RESP_USE_STRLEN);
@@ -948,17 +956,30 @@ void WifiConfigurationAp::SmartConfigEventHandler(void *arg, esp_event_base_t ev
             ESP_LOGI(TAG, "Got SmartConfig credentials");
             smartconfig_event_got_ssid_pswd_t *evt = (smartconfig_event_got_ssid_pswd_t *)event_data;
 
-            char ssid[32], password[64];
+            char ssid[33] = {};
+            char password[65] = {};
             memcpy(ssid, evt->ssid, sizeof(evt->ssid));
             memcpy(password, evt->password, sizeof(evt->password));
             ESP_LOGI(TAG, "SmartConfig SSID: %s, Password: %s", ssid, password);
-            // 尝试连接WiFi会失败，故不连接
-            WifiConnectionManager::GetInstance().Connect(ssid, password);
-            xTaskCreate([](void *ctx){
-                ESP_LOGI(TAG, "Restarting in 3 second");
-                vTaskDelay(pdMS_TO_TICKS(3000));
-                esp_restart();
-            }, "restart_task", 4096, NULL, 5, NULL);
+            auto& wifi_manager = WifiConnectionManager::GetInstance();
+            char bssid[18] = {};
+            esp_err_t result = wifi_manager.Connect(ssid, password, bssid);
+            if (result == ESP_OK) {
+                wifi_manager.SaveCredentials(ssid, password, bssid);
+                auto& wifi_configuration = WifiConfiguration::GetInstance();
+                wifi_configuration.NotifyEvent(WifiConfigEvent::CONFIG_SUCCESS,
+                    "Connected to WiFi: " + std::string(ssid));
+                if (wifi_configuration.ShouldRestartOnSuccess()) {
+                    xTaskCreate([](void *ctx){
+                        ESP_LOGI(TAG, "Restarting in 3 seconds");
+                        vTaskDelay(pdMS_TO_TICKS(3000));
+                        esp_restart();
+                    }, "restart_task", 4096, NULL, 5, NULL);
+                }
+            } else {
+                WifiConfiguration::GetInstance().NotifyEvent(WifiConfigEvent::CONFIG_FAILED,
+                    "Failed to connect to WiFi: " + std::string(ssid));
+            }
             break;
         }
         case SC_EVENT_SEND_ACK_DONE:

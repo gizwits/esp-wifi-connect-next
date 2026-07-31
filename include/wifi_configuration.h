@@ -14,6 +14,7 @@
 enum class WifiConfigEvent {
     CONFIG_PACKET_RECEIVED,    // When configuration packet is received
     CONFIG_FAILED,             // When configuration fails
+    CONFIG_SUCCESS,            // When configuration succeeds
 };
 
 // Callback function type for WiFi configuration events
@@ -28,6 +29,11 @@ public:
     
     // Register callback for WiFi configuration events
     void RegisterCallback(WifiConfigCallback callback);
+    void ClearCallbacks();
+
+    // Control whether a successful configuration reboots the device.
+    void SetRestartOnSuccess(bool restart_on_success);
+    bool ShouldRestartOnSuccess() const;
     
     // Notify all registered callbacks about an event
     void NotifyEvent(WifiConfigEvent event, const std::string& message = "");
@@ -39,6 +45,7 @@ private:
     WifiConfiguration& operator=(const WifiConfiguration&) = delete;
 
     std::vector<WifiConfigCallback> callbacks_;
+    bool restart_on_success_ = true;
 };
 
 #endif // WIFI_CONFIGURATION_H

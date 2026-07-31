@@ -17,14 +17,26 @@ WifiConnectionManager& WifiConnectionManager::GetInstance() {
 }
 
 esp_err_t WifiConnectionManager::InitializeWiFi() {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_err_t ret = esp_wifi_init(&cfg);
+    auto& manager = GetInstance();
+    esp_err_t ret = manager.RegisterEventHandlers();
     if (ret != ESP_OK) {
         return ret;
     }
+
+    wifi_mode_t mode;
+    ret = esp_wifi_get_mode(&mode);
+    if (ret == ESP_ERR_WIFI_NOT_INIT) {
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        ret = esp_wifi_init(&cfg);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+    } else if (ret != ESP_OK) {
+        return ret;
+    }
+
     ret = esp_wifi_set_mode(WIFI_MODE_STA);
     if (ret != ESP_OK) {
-        esp_wifi_deinit();
         return ret;
     }
     ret = esp_wifi_start();
@@ -37,36 +49,82 @@ esp_err_t WifiConnectionManager::InitializeWiFi() {
 WifiConnectionManager::WifiConnectionManager() 
     : event_group_(xEventGroupCreate())
     , is_connecting_(false)
+    , instance_any_id_(nullptr)
+    , instance_got_ip_(nullptr)
+    , handlers_registered_(false)
     , scan_timer_(nullptr)
     , first_scan_done_(false) {
-    
-    // Register event handlers
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                      ESP_EVENT_ANY_ID,
-                                                      &WifiConnectionManager::WifiEventHandler,
-                                                      this,
-                                                      &instance_any_id_));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                      IP_EVENT_STA_GOT_IP,
-                                                      &WifiConnectionManager::IpEventHandler,
-                                                      this,
-                                                      &instance_got_ip_));
 }
 
 WifiConnectionManager::~WifiConnectionManager() {
-    StopScanTimer();
+    Shutdown();
     if (event_group_) {
         vEventGroupDelete(event_group_);
     }
+}
+
+esp_err_t WifiConnectionManager::RegisterEventHandlers() {
+    if (handlers_registered_) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &WifiConnectionManager::WifiEventHandler,
+                                                        this,
+                                                        &instance_any_id_);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    ret = esp_event_handler_instance_register(IP_EVENT,
+                                              IP_EVENT_STA_GOT_IP,
+                                              &WifiConnectionManager::IpEventHandler,
+                                              this,
+                                              &instance_got_ip_);
+    if (ret != ESP_OK) {
+        esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id_);
+        instance_any_id_ = nullptr;
+        return ret;
+    }
+
+    handlers_registered_ = true;
+    return ESP_OK;
+}
+
+void WifiConnectionManager::UnregisterEventHandlers() {
     if (instance_any_id_) {
         esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id_);
+        instance_any_id_ = nullptr;
     }
     if (instance_got_ip_) {
         esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip_);
+        instance_got_ip_ = nullptr;
     }
-    // Stop and deinit WiFi
-    esp_wifi_stop();
-    esp_wifi_deinit();
+    handlers_registered_ = false;
+}
+
+void WifiConnectionManager::Shutdown() {
+    StopScanTimer();
+    UnregisterEventHandlers();
+
+    is_connecting_ = false;
+    first_scan_done_ = false;
+    on_scan_results_ = nullptr;
+    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+
+    esp_err_t ret = esp_wifi_disconnect();
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT && ret != ESP_ERR_WIFI_NOT_STARTED) {
+        ESP_LOGW(TAG, "esp_wifi_disconnect failed during shutdown: %s", esp_err_to_name(ret));
+    }
+    ret = esp_wifi_stop();
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT && ret != ESP_ERR_WIFI_NOT_STARTED) {
+        ESP_LOGW(TAG, "esp_wifi_stop failed during shutdown: %s", esp_err_to_name(ret));
+    }
+    ret = esp_wifi_deinit();
+    if (ret != ESP_OK && ret != ESP_ERR_WIFI_NOT_INIT) {
+        ESP_LOGW(TAG, "esp_wifi_deinit failed during shutdown: %s", esp_err_to_name(ret));
+    }
 }
 
 void WifiConnectionManager::StartScanTimer() {

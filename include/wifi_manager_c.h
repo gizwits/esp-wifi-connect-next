@@ -7,6 +7,7 @@ extern "C" {
 
 #define ESP_ERR_WIFI_PASSWORD_INCORRECT 0x3008
 
+#include <stdbool.h>
 #include "esp_err.h"
 
 /**
@@ -58,6 +59,12 @@ void WifiConnectionManager_SaveServerUrl(const char* server_url);
  * @param trace_id 链路追踪ID（32字符十六进制字符串）
  */
 void WifiConnectionManager_SaveTraceId(const char* trace_id);
+
+/** Notify the application that WiFi configuration completed successfully. */
+void WifiConfiguration_NotifySuccess(const char* message);
+
+/** Return whether successful configuration should reboot the device. */
+bool WifiConfiguration_ShouldRestartOnSuccess(void);
 
 #ifdef __cplusplus
 }
